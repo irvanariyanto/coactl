@@ -9,6 +9,7 @@ export interface ResolvedAsset {
   asset: Asset;
   sourceName: string;
   readOnly: boolean;
+  origin: { dir: string };
   provenance: Provenance;
 }
 
