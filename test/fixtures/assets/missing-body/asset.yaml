@@ -1,0 +1,9 @@
+id: missing-body
+kind: rule
+name: Missing Body
+version: 0.1.0
+description: The body file referenced here does not exist on disk
+activation: auto
+targets:
+  - claude-code
+body: nonexistent.md

@@ -1,0 +1,13 @@
+id: valid-skill
+kind: skill
+name: Valid Skill
+version: 0.1.0
+description: A valid skill fixture for testing
+activation: agent-requested
+triggers:
+  - type: glob
+    pattern: "**/*.ts"
+targets:
+  - claude-code
+  - cursor
+body: body.md

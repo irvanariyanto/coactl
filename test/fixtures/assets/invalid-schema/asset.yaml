@@ -1,0 +1,9 @@
+id: Invalid_Schema
+kind: unknown-kind
+name: Bad Asset
+version: not-semver
+description: Multiple schema violations
+activation: unknown
+targets:
+  - unsupported-tool
+body: body.md
