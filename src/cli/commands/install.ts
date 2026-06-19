@@ -3,6 +3,7 @@ import chalk from "chalk";
 import { buildSourceLoaders } from "../../sources/registry-of-sources.js";
 import { loadManifest } from "../../schema/load.js";
 import { computeIntegrity } from "../../registry/integrity.js";
+import { readLockfile, writeLockfile, upsertLockEntry } from "../../registry/lockfile.js";
 import { createSpinner, printHeader } from "../../ui/output.js";
 import { BRAND } from "../../tui/theme.js";
 
@@ -30,12 +31,7 @@ export async function installAction(idAtVersion: string): Promise<void> {
       const result = await loader.load();
       const match = result.assets.find((a) => a.asset.id === id);
       if (match) {
-        foundAsset = {
-          id: match.asset.id,
-          sourceName: match.sourceName,
-          dir: match.origin.dir,
-          version: match.asset.version,
-        };
+        foundAsset = { id: match.asset.id, sourceName: match.sourceName, dir: match.origin.dir, version: match.asset.version };
         break;
       }
     }
@@ -49,13 +45,14 @@ export async function installAction(idAtVersion: string): Promise<void> {
     }
 
     const integrity = computeIntegrity(foundAsset.dir);
+    const lockfile = readLockfile();
+    const updated = upsertLockEntry(lockfile, id, { source: foundAsset.sourceName, version: foundAsset.version, integrity });
+    writeLockfile(updated);
+
     p.log.success(`Found ${chalk.bold(id)} in source ${chalk.cyan(foundAsset.sourceName)}`);
     p.log.message(`Version:   ${chalk.dim(foundAsset.version ?? "unknown")}`);
     p.log.message(`Integrity: ${chalk.dim(integrity)}`);
-
-    // TODO(AC-014): write lockfile entry { id, source, version, integrity }
-    p.log.warn("Lockfile recording is not yet implemented (AC-014).");
-    p.outro(chalk.green(`Installed ${chalk.bold(id)}.`));
+    p.outro(chalk.green(`Installed ${chalk.bold(id)} — lockfile updated.`));
   } catch (err) {
     spinner.stop();
     p.log.error(`Install failed: ${(err as Error).message}`);
