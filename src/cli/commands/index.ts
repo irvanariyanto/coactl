@@ -84,7 +84,7 @@ export const commandSpecs: CommandSpec[] = [
     name: "why",
     description: "Show the winning source and override chain for an asset",
     configure: (cmd) => {
-      cmd.argument("<id>", "asset id").action(whyAction);
+      cmd.argument("<id>", "asset id").option("--json", "output as JSON").action(whyAction);
     },
   },
   {
