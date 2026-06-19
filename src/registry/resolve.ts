@@ -1,12 +1,7 @@
 import type { LoadedAsset } from "../sources/types.js";
 import type { Manifest } from "../schema/index.js";
 import type { Registry, ResolvedAsset } from "./types.js";
-
-// Seam for AC-015: picks winning asset when multiple sources provide the same id.
-// Currently returns first candidate; AC-015 will implement precedence ordering.
-function pickWinner(candidates: LoadedAsset[]): LoadedAsset {
-  return candidates[0];
-}
+import { pickWinnerByPrecedence } from "./precedence.js";
 
 // Seam for AC-016: applies manifest overrides on top of a resolved asset.
 // Currently a no-op; AC-016 will implement the override layer.
@@ -29,7 +24,7 @@ export function resolveRegistry(loadedAssets: LoadedAsset[], manifest: Manifest)
     if (candidates.length > 1) {
       conflicts.push({ id, candidates: candidates.map((c) => c.sourceName) });
     }
-    const winner = pickWinner(candidates);
+    const winner = pickWinnerByPrecedence(candidates, manifest);
     const raw: ResolvedAsset = {
       asset: winner.asset,
       sourceName: winner.sourceName,
