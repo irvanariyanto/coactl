@@ -1,29 +1,67 @@
 import * as p from "@clack/prompts";
 import chalk from "chalk";
-import { printNotImplemented } from "../../ui/output.js";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { parse, stringify } from "yaml";
+import { buildSourceLoaders } from "../../sources/registry-of-sources.js";
+import { resolveRegistry } from "../../registry/resolve.js";
+import { loadManifest } from "../../schema/load.js";
 import { BRAND } from "../../tui/theme.js";
 
 export async function overrideAction(id: string): Promise<void> {
   p.intro(chalk.bgCyan(chalk.black(` ${BRAND} override `)));
 
-  p.log.info(`Asset: ${chalk.bold(id)}`);
-
-  const fields = await p.multiselect({
-    message: "Which fields do you want to override?",
-    options: [
-      { value: "targets", label: "Targets", hint: "Change which tools this asset syncs to" },
-      { value: "scope", label: "Scope", hint: "Modify language or path scoping" },
-      { value: "patch", label: "Patch body", hint: "Override the instruction body" },
-    ],
-    required: true,
-  });
-
-  if (p.isCancel(fields)) {
-    p.cancel("Cancelled.");
+  const manifestPath = resolve("./agent.manifest.yaml");
+  if (!existsSync(manifestPath)) {
+    p.log.error("No agent.manifest.yaml found in current directory.");
+    process.exitCode = 1;
     return;
   }
 
-  p.log.info(`Would override fields: ${chalk.cyan((fields as string[]).join(", "))}`);
-  printNotImplemented("override", "AC-016");
-  p.outro(chalk.dim("Overrides will be implemented in AC-016."));
+  try {
+    const manifest = loadManifest(manifestPath);
+    const loaders = buildSourceLoaders(manifestPath);
+    const allLoaded = [];
+    for (const loader of loaders) {
+      const result = await loader.load();
+      allLoaded.push(...result.assets);
+    }
+    const registry = resolveRegistry(allLoaded, manifest);
+    const resolved = registry.get(id);
+
+    if (!resolved) {
+      p.log.error(`Asset "${id}" not found in registry.`);
+      process.exitCode = 1;
+      return;
+    }
+
+    const fields = await p.multiselect({
+      message: `Which fields to override for ${chalk.bold(id)}?`,
+      options: [
+        { value: "targets", label: "Targets", hint: resolved.asset.targets.join(", ") },
+        { value: "scope", label: "Scope", hint: "languages/paths" },
+        { value: "patch", label: "Patch body", hint: "replacement body file" },
+      ],
+      required: true,
+    });
+
+    if (p.isCancel(fields)) { p.cancel("Cancelled."); return; }
+
+    const overrideBlock: Record<string, unknown> = {};
+    const selected = fields as string[];
+    if (selected.includes("targets")) overrideBlock.targets = resolved.asset.targets;
+    if (selected.includes("scope")) overrideBlock.scope = resolved.asset.scope ?? {};
+    if (selected.includes("patch")) overrideBlock.patch = `patches/${id}.md`;
+
+    const raw = parse(readFileSync(manifestPath, "utf-8")) as Record<string, unknown>;
+    if (!raw.overrides) raw.overrides = {};
+    (raw.overrides as Record<string, unknown>)[id] = overrideBlock;
+    writeFileSync(manifestPath, stringify(raw), "utf-8");
+
+    p.log.success(`Scaffolded override block for ${chalk.bold(id)} in agent.manifest.yaml`);
+    p.outro(chalk.green("Override added. Edit the block to customize values."));
+  } catch (err) {
+    p.log.error(`Override failed: ${(err as Error).message}`);
+    process.exitCode = 1;
+  }
 }

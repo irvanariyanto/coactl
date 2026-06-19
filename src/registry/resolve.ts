@@ -2,12 +2,7 @@ import type { LoadedAsset } from "../sources/types.js";
 import type { Manifest } from "../schema/index.js";
 import type { Registry, ResolvedAsset } from "./types.js";
 import { pickWinnerByPrecedence } from "./precedence.js";
-
-// Seam for AC-016: applies manifest overrides on top of a resolved asset.
-// Currently a no-op; AC-016 will implement the override layer.
-function applyOverrides(resolved: ResolvedAsset, _manifest: Manifest): ResolvedAsset {
-  return resolved;
-}
+import { applyOverrides } from "./overrides.js";
 
 export function resolveRegistry(loadedAssets: LoadedAsset[], manifest: Manifest): Registry {
   const byId = new Map<string, LoadedAsset[]>();
