@@ -21,7 +21,7 @@ export const commandSpecs: CommandSpec[] = [
     name: "add",
     description: "Scaffold a schema-valid asset",
     configure: (cmd) => {
-      cmd.argument("<id>", "asset id").option("--kind <kind>", "asset kind").action(addAction);
+      cmd.argument("<id>", "asset id").option("--kind <kind>", "asset kind").option("--force", "overwrite if asset already exists").action(addAction);
     },
   },
   {
