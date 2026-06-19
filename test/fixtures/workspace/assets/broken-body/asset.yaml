@@ -1,0 +1,9 @@
+id: broken-body
+kind: rule
+name: Broken Body
+version: 0.1.0
+description: References a body file that does not exist
+activation: auto
+targets:
+  - claude-code
+body: missing.md
