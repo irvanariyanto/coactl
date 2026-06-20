@@ -19,9 +19,10 @@ registerCommands(program);
 program
   .command("dashboard")
   .description("Open the interactive TUI dashboard")
-  .action(async () => {
+  .option("--global", "use global manifest")
+  .action(async (options: { global?: boolean }) => {
     const { dashboardAction } = await import("./commands/dashboard.js");
-    await dashboardAction();
+    await dashboardAction(options);
   });
 
 program.action(async () => {
