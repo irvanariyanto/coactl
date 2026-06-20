@@ -1,9 +1,9 @@
 import * as p from "@clack/prompts";
 import chalk from "chalk";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { stringify } from "yaml";
-import { globalConfigDir, globalManifestPath } from "../../io/global-paths.js";
+import { globalManifestPath } from "../../io/global-paths.js";
 import { BRAND } from "../../tui/theme.js";
 
 export async function initAction(options: { force?: boolean; global?: boolean }): Promise<void> {
@@ -21,32 +21,13 @@ export async function initAction(options: { force?: boolean; global?: boolean })
     }
   }
 
-  const interactive = process.stdin.isTTY;
-
-  const sourceName = "local";
-  let assetsPath = ".";
-
-  if (interactive) {
-    const pathInput = await p.text({ message: "Assets directory (relative to .coactl/)", placeholder: ".", defaultValue: "." });
-    if (p.isCancel(pathInput)) { p.cancel("Aborted."); return; }
-    assetsPath = (pathInput as string) || ".";
-  }
-
   const manifest = {
-    sources: [{ name: sourceName, type: "local", path: assetsPath }],
-    resolution: { precedence: [sourceName] },
+    sources: [{ name: "local", type: "local", path: "." }],
+    resolution: { precedence: ["local"] },
   };
 
   writeFileSync(manifestPath, stringify(manifest), "utf-8");
   p.log.success(`Created ${chalk.cyan(options.global ? "agent.manifest.yaml" : ".coactl/agent.manifest.yaml")}`);
-
-  const absAssetsDir = join(dirname(resolve(manifestPath)), assetsPath);
-  if (!existsSync(absAssetsDir)) {
-    for (const subdir of ["skills", "commands", "workflows", "rules"]) {
-      mkdirSync(join(absAssetsDir, subdir), { recursive: true });
-    }
-    p.log.success(`Created ${chalk.cyan(assetsPath + "/")}`);
-  }
 
   p.outro(chalk.green(`${options.global ? "Global config" : "Project"} ready. Run ${chalk.bold(`coactl add --kind rule my-first-rule${options.global ? " --global" : ""}`)} to scaffold your first asset.`));
 }
