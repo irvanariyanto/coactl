@@ -22,12 +22,13 @@ export interface CommandSpec {
 export const commandSpecs: CommandSpec[] = [
   {
     name: "import",
-    description: "Import existing Claude Code skills into coactl",
+    description: "Import assets from an existing AI tool into coactl",
     configure: (cmd) => {
       cmd
-        .argument("[id]", "skill id to import")
-        .option("--all", "import all skills")
-        .option("--global", "import from/to global scope (~/.claude/skills → ~/.config/coactl/assets)")
+        .argument("[id]", "asset id to import")
+        .option("--from <tool>", "source tool: claude-code|cursor|windsurf|copilot (default: claude-code)")
+        .option("--all", "import all assets from the source")
+        .option("--global", "import from/to global scope")
         .option("--force", "overwrite existing assets")
         .action(importAction);
     },

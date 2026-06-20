@@ -1,81 +1,147 @@
 import * as p from "@clack/prompts";
 import chalk from "chalk";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { renderAssetYaml } from "../../scaffold/templates.js";
 import { parseHeader } from "../../transform/header.js";
 import { globalAssetsDir } from "../../io/global-paths.js";
 import { BRAND } from "../../tui/theme.js";
+import type { AssetKind } from "../../schema/index.js";
 
-function claudeSkillsDir(global?: boolean): string {
-  return global ? join(homedir(), ".claude", "skills") : resolve(".claude", "skills");
+type ToolSource = "claude-code" | "cursor" | "windsurf" | "copilot";
+const VALID_SOURCES: ToolSource[] = ["claude-code", "cursor", "windsurf", "copilot"];
+
+interface ImportedAsset {
+  id: string;
+  kind: AssetKind;
+  body: string;
 }
 
-function stripHeader(content: string): string {
+function sourcePath(tool: ToolSource, global?: boolean): string {
+  const base = global ? homedir() : process.cwd();
+  switch (tool) {
+    case "claude-code": return join(base, ".claude", "skills");
+    case "cursor":      return join(base, ".cursor", "rules");
+    case "windsurf":    return join(base, ".windsurfrules");
+    case "copilot":     return join(base, ".github", "copilot-instructions.md");
+  }
+}
+
+function stripCoactlHeader(content: string): string {
   return content.replace(/^<!--\n[\s\S]*?-->\n/, "").trimStart();
 }
 
-async function importOne(id: string, skillsDir: string, assetsDir: string, force?: boolean): Promise<boolean> {
-  const skillFile = join(skillsDir, id, "SKILL.md");
-  if (!existsSync(skillFile)) {
-    p.log.error(`Skill "${id}" not found at ${skillFile}`);
-    return false;
+function stripYamlFrontmatter(content: string): string {
+  return content.replace(/^---\n[\s\S]*?\n---\n\n?/, "").trimStart();
+}
+
+function kindFromCursorFrontmatter(content: string): AssetKind {
+  const m = content.match(/^alwaysApply:\s*(true|false)/m);
+  return m?.[1] === "true" ? "rule" : "skill";
+}
+
+function extractCoactlBlocks(content: string): Array<{ id: string; body: string }> {
+  const blocks: Array<{ id: string; body: string }> = [];
+  const re = /<!-- BEGIN coactl:([^\s>]+) -->([\s\S]*?)<!-- END coactl:\1 -->/g;
+  let match;
+  while ((match = re.exec(content)) !== null) {
+    blocks.push({ id: match[1], body: stripCoactlHeader(match[2].trim()) });
+  }
+  return blocks;
+}
+
+function listAssets(tool: ToolSource, global?: boolean): ImportedAsset[] {
+  const path = sourcePath(tool, global);
+
+  if (tool === "claude-code") {
+    if (!existsSync(path)) return [];
+    return readdirSync(path, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && existsSync(join(path, d.name, "SKILL.md")))
+      .map((d) => {
+        const raw = readFileSync(join(path, d.name, "SKILL.md"), "utf-8");
+        return { id: d.name, kind: "skill" as AssetKind, body: parseHeader(raw) ? stripCoactlHeader(raw) : raw };
+      });
   }
 
-  const raw = readFileSync(skillFile, "utf-8");
-  const hasHeader = parseHeader(raw) !== null;
-  const body = hasHeader ? stripHeader(raw) : raw;
+  if (tool === "cursor") {
+    if (!existsSync(path)) return [];
+    return readdirSync(path)
+      .filter((f) => f.endsWith(".mdc"))
+      .map((f) => {
+        const raw = readFileSync(join(path, f), "utf-8");
+        return {
+          id: basename(f, ".mdc"),
+          kind: kindFromCursorFrontmatter(raw),
+          body: stripCoactlHeader(stripYamlFrontmatter(raw)),
+        };
+      });
+  }
 
-  const assetDir = join(assetsDir, id);
+  // windsurf / copilot — single aggregate file
+  if (!existsSync(path)) return [];
+  const content = readFileSync(path, "utf-8");
+  const blocks = extractCoactlBlocks(content);
+  if (blocks.length > 0) return blocks.map((b) => ({ ...b, kind: "rule" as AssetKind }));
+  const id = tool === "windsurf" ? "windsurf-rules" : "copilot-instructions";
+  return [{ id, kind: "rule" as AssetKind, body: content.trimStart() }];
+}
+
+function writeAsset(asset: ImportedAsset, assetsDir: string, force?: boolean): boolean {
+  const assetDir = join(assetsDir, asset.id);
   if (existsSync(assetDir) && !force) {
-    p.log.warn(`"${id}" already exists in assets. Use --force to overwrite.`);
+    p.log.warn(`"${asset.id}" already exists. Use --force to overwrite.`);
     return false;
   }
-
   mkdirSync(assetDir, { recursive: true });
-  writeFileSync(join(assetDir, "asset.yaml"), renderAssetYaml({ id, kind: "skill" }));
-  writeFileSync(join(assetDir, "body.md"), body);
-
-  p.log.success(`Imported ${chalk.bold(id)} → ${assetDir}`);
+  writeFileSync(join(assetDir, "asset.yaml"), renderAssetYaml({ id: asset.id, kind: asset.kind }));
+  writeFileSync(join(assetDir, "body.md"), asset.body);
+  p.log.success(`Imported ${chalk.bold(asset.id)} (${asset.kind}) → ${assetDir}`);
   return true;
 }
 
-export async function importAction(id: string | undefined, options: { all?: boolean; global?: boolean; force?: boolean }): Promise<void> {
+export async function importAction(
+  id: string | undefined,
+  options: { all?: boolean; global?: boolean; force?: boolean; from?: string },
+): Promise<void> {
   p.intro(chalk.bgCyan(chalk.black(` ${BRAND} import `)));
 
-  if (!id && !options.all) {
-    p.log.error("Provide a skill id or use --all to import all skills.");
+  const tool = (options.from ?? "claude-code") as ToolSource;
+  if (!VALID_SOURCES.includes(tool)) {
+    p.log.error(`Unknown source "${tool}". Valid: ${VALID_SOURCES.join(", ")}`);
     process.exitCode = 1;
     return;
   }
 
-  const skillsDir = claudeSkillsDir(options.global);
+  if (!id && !options.all) {
+    p.log.error("Provide an asset id or use --all to import everything from the source.");
+    process.exitCode = 1;
+    return;
+  }
+
+  const path = sourcePath(tool, options.global);
   const assetsDir = options.global ? globalAssetsDir() : resolve("assets");
 
-  if (!existsSync(skillsDir)) {
-    p.log.error(`No skills directory found at ${skillsDir}`);
-    process.exitCode = 1;
-    return;
-  }
-
   if (options.all) {
-    const dirs = readdirSync(skillsDir, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => d.name);
-
-    if (dirs.length === 0) {
-      p.log.warn("No skills found.");
+    const assets = listAssets(tool, options.global);
+    if (assets.length === 0) {
+      p.log.warn(`No assets found at ${path}`);
       return;
     }
-
     let count = 0;
-    for (const skillId of dirs) {
-      if (await importOne(skillId, skillsDir, assetsDir, options.force)) count++;
+    for (const asset of assets) {
+      if (writeAsset(asset, assetsDir, options.force)) count++;
     }
-    p.outro(chalk.green(`Imported ${count}/${dirs.length} skill(s). Run ${chalk.bold("coactl sync")} to generate native files.`));
+    p.outro(chalk.green(`Imported ${count}/${assets.length} asset(s). Run ${chalk.bold("coactl sync")} to generate native files.`));
   } else {
-    const ok = await importOne(id!, skillsDir, assetsDir, options.force);
+    const assets = listAssets(tool, options.global);
+    const asset = assets.find((a) => a.id === id);
+    if (!asset) {
+      p.log.error(`"${id}" not found in ${tool} at ${path}`);
+      process.exitCode = 1;
+      return;
+    }
+    const ok = writeAsset(asset, assetsDir, options.force);
     if (ok) {
       p.outro(chalk.green(`Done. Run ${chalk.bold("coactl sync")} to generate native files for other tools.`));
     } else {
