@@ -22,9 +22,9 @@ function sourcePath(tool: ToolSource, global?: boolean): string {
   const base = global ? homedir() : process.cwd();
   switch (tool) {
     case "claude-code": return join(homedir(), ".claude", "skills");
-    case "cursor":      return join(base, ".cursor", "rules");
-    case "windsurf":    return join(base, ".windsurfrules");
-    case "copilot":     return join(base, ".github", "copilot-instructions.md");
+    case "cursor":      return join(homedir(), ".cursor", "rules");
+    case "windsurf":    return join(homedir(), ".windsurfrules");
+    case "copilot":     return join(homedir(), ".github", "copilot-instructions.md");
   }
 }
 
@@ -118,26 +118,40 @@ export async function importAction(
 ): Promise<void> {
   p.intro(chalk.bgCyan(chalk.black(` ${BRAND} import `)));
 
-  const tool = (options.from ?? "claude-code") as ToolSource;
-  if (!VALID_SOURCES.includes(tool)) {
-    p.log.error(`Unknown source "${tool}". Valid: ${VALID_SOURCES.join(", ")}`);
-    process.exitCode = 1;
-    return;
+  let tool: ToolSource;
+  if (options.from) {
+    if (!VALID_SOURCES.includes(options.from as ToolSource)) {
+      p.log.error(`Unknown source "${options.from}". Valid: ${VALID_SOURCES.join(", ")}`);
+      process.exitCode = 1;
+      return;
+    }
+    tool = options.from as ToolSource;
+  } else if (!id && !options.all) {
+    const picked = await p.select({
+      message: "Import from which tool?",
+      options: [
+        { value: "claude-code", label: "Claude Code", hint: "~/.claude/skills/" },
+        { value: "cursor",      label: "Cursor",      hint: ".cursor/rules/" },
+        { value: "windsurf",    label: "Windsurf",    hint: ".windsurfrules" },
+        { value: "copilot",     label: "Copilot",     hint: ".github/copilot-instructions.md" },
+      ],
+    });
+    if (p.isCancel(picked)) {
+      p.cancel("Cancelled.");
+      return;
+    }
+    tool = picked as ToolSource;
+  } else {
+    tool = "claude-code";
   }
 
-  if (!id && !options.all) {
-    p.log.error("Provide an asset id or use --all to import everything from the source.");
-    process.exitCode = 1;
-    return;
-  }
-
-  const path = sourcePath(tool, options.global);
+  const sourceLoc = sourcePath(tool, options.global);
   const root = options.global ? globalConfigDir() : join(process.cwd(), ".coactl");
+  const assets = listAssets(tool, options.global);
 
   if (options.all) {
-    const assets = listAssets(tool, options.global);
     if (assets.length === 0) {
-      p.log.warn(`No assets found at ${path}`);
+      p.log.warn(`No assets found at ${sourceLoc}`);
       return;
     }
     let count = 0;
@@ -145,11 +159,13 @@ export async function importAction(
       if (writeAsset(asset, root, options.force)) count++;
     }
     p.outro(chalk.green(`Imported ${count}/${assets.length} asset(s). Run ${chalk.bold("coactl sync")} to generate files for other tools.`));
-  } else {
-    const assets = listAssets(tool, options.global);
+    return;
+  }
+
+  if (id) {
     const asset = assets.find((a) => a.id === id);
     if (!asset) {
-      p.log.error(`"${id}" not found in ${tool} at ${path}`);
+      p.log.error(`"${id}" not found in ${tool} at ${sourceLoc}`);
       process.exitCode = 1;
       return;
     }
@@ -159,5 +175,33 @@ export async function importAction(
     } else {
       process.exitCode = 1;
     }
+    return;
   }
+
+  // Interactive picker — no id or --all given
+  if (assets.length === 0) {
+    p.log.warn(`No assets found at ${sourceLoc}`);
+    return;
+  }
+
+  const selected = await p.multiselect<string>({
+    message: `Select assets to import from ${chalk.bold(tool)}:`,
+    options: assets.map((a) => ({
+      value: a.id,
+      label: a.id,
+      hint: a.kind,
+    })),
+  });
+
+  if (p.isCancel(selected)) {
+    p.cancel("Cancelled.");
+    return;
+  }
+
+  const toImport = assets.filter((a) => selected.includes(a.id));
+  let count = 0;
+  for (const asset of toImport) {
+    if (writeAsset(asset, root, options.force)) count++;
+  }
+  p.outro(chalk.green(`Imported ${count}/${toImport.length} asset(s). Run ${chalk.bold("coactl sync")} to generate files for other tools.`));
 }
