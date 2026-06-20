@@ -5,14 +5,16 @@ import { resolveRegistry } from "../../registry/resolve.js";
 import { transform } from "../../transform/engine.js";
 import { loadManifest } from "../../schema/load.js";
 import { writeFiles } from "../../io/write-files.js";
+import { globalRootDir } from "../../io/global-paths.js";
 import { createSpinner, printHeader } from "../../ui/output.js";
 import type { AssetKind, Target } from "../../schema/index.js";
 
 export async function syncAction(options: { global?: boolean; kind?: string; target?: string }): Promise<void> {
   printHeader("sync");
 
+  const rootDir = options.global ? globalRootDir() : undefined;
   if (options.global) {
-    p.log.warn("--global is not yet implemented (AC-022). Using project scope.");
+    p.log.message(`Syncing to global paths (${globalRootDir()})`);
   }
 
   const spinner = createSpinner("Loading manifest and sources...").start();
@@ -46,7 +48,7 @@ export async function syncAction(options: { global?: boolean; kind?: string; tar
     }
 
     const writSpinner = createSpinner(`Writing ${result.files.length} file(s)...`).start();
-    const summary = writeFiles(result.files);
+    const summary = writeFiles(result.files, rootDir);
     writSpinner.stop();
 
     if (summary.written > 0) {

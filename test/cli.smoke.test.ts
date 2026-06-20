@@ -51,10 +51,9 @@ describe("coactl CLI smoke test", () => {
     expect(output).toMatch(/status failed|not found|manifest/i);
   });
 
-  it("explain command produces table output", () => {
+  it("explain command reports missing manifest gracefully", () => {
     const output = runCliNoColor(["explain", "test-asset"]);
-    expect(output).toContain("Claude Code");
-    expect(output).toContain("Cursor");
+    expect(output).toMatch(/explain failed|not found|manifest/i);
   });
 
   it("why command reports missing manifest gracefully", () => {

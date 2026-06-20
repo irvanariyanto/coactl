@@ -91,7 +91,7 @@ export const commandSpecs: CommandSpec[] = [
     name: "explain",
     description: "Explain how an asset resolves",
     configure: (cmd) => {
-      cmd.argument("<id>", "asset id").action(explainAction);
+      cmd.argument("<id>", "asset id").option("--json", "output as JSON").action(explainAction);
     },
   },
 ];
