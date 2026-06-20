@@ -223,17 +223,26 @@ coactl sync --global             # write to ~/.claude/, ~/.cursor/, …
 ---
 
 ### `coactl import`
-Import existing Claude Code skills into coactl so they can be synced to other tools.
+Import assets from an existing AI tool into coactl so they can be synced to other tools.
 
 ```bash
-coactl import my-skill           # import one skill from .claude/skills/
-coactl import my-skill --global  # import from ~/.claude/skills/ → ~/.config/coactl/assets/
-coactl import --all              # import every skill in .claude/skills/
-coactl import --all --global     # import every global skill
-coactl import my-skill --force   # overwrite existing asset
+# Claude Code skills (default)
+coactl import my-skill
+coactl import --all
+coactl import --all --global       # from ~/.claude/skills/ → ~/.config/coactl/assets/
+
+# Cursor rules
+coactl import --from cursor my-rule
+coactl import --from cursor --all
+
+# Windsurf / Copilot (splits coactl-managed blocks; falls back to one rule)
+coactl import --from windsurf --all
+coactl import --from copilot --all
+
+coactl import my-skill --force     # overwrite existing asset
 ```
 
-Imported skills get a canonical `asset.yaml` (targeting all four tools) and a `body.md` containing the original content. Run `coactl sync` after importing to generate native files for Cursor, Windsurf, and Copilot.
+Imported assets get a canonical `asset.yaml` (targeting all four tools) and a `body.md` with the original content. Run `coactl sync` after importing to generate native files for other tools.
 
 ---
 
