@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { registerCommands } from "./commands/index.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -19,8 +19,9 @@ registerCommands(program);
 program
   .command("dashboard")
   .description("Open the interactive TUI dashboard")
-  .option("--global", "use global manifest")
-  .action(async (options: { global?: boolean }) => {
+  .addOption(new Option("--global", "use global manifest").conflicts("project"))
+  .addOption(new Option("--project", "use project manifest (errors instead of falling back to global)").conflicts("global"))
+  .action(async (options: { global?: boolean; project?: boolean }) => {
     const { dashboardAction } = await import("./commands/dashboard.js");
     await dashboardAction(options);
   });

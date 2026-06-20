@@ -8,7 +8,7 @@ import { createSpinner, createTable, printHeader } from "../../ui/output.js";
 import { resolveManifestPath } from "../../io/global-paths.js";
 import type { Target, AssetKind } from "../../schema/index.js";
 
-export async function buildAction(options: { target?: string; kind?: string; global?: boolean }): Promise<void> {
+export async function buildAction(options: { target?: string; kind?: string; global?: boolean; project?: boolean }): Promise<void> {
   printHeader("build");
 
   if (!options.target) {
@@ -20,7 +20,7 @@ export async function buildAction(options: { target?: string; kind?: string; glo
   const spinner = createSpinner("Loading manifest and sources...").start();
 
   try {
-    const manifestPath = resolveManifestPath(options.global);
+    const manifestPath = resolveManifestPath(options);
     const manifest = loadManifest(manifestPath);
     const loaders = buildSourceLoaders(manifestPath);
 

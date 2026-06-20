@@ -46,18 +46,25 @@ describe("coactl CLI smoke test", () => {
     expect(output).toMatch(/^\d+\.\d+\.\d+/);
   });
 
+  // --project forces project scope (no fallback to global) so these stay deterministic
+  // regardless of whether the machine running the test has a global manifest configured.
   it("status command reports missing manifest gracefully", () => {
-    const output = runCliNoColor(["status"]);
+    const output = runCliNoColor(["status", "--project"]);
     expect(output).toMatch(/status failed|not found|manifest/i);
   });
 
   it("explain command reports missing manifest gracefully", () => {
-    const output = runCliNoColor(["explain", "test-asset"]);
+    const output = runCliNoColor(["explain", "test-asset", "--project"]);
     expect(output).toMatch(/explain failed|not found|manifest/i);
   });
 
   it("why command reports missing manifest gracefully", () => {
-    const output = runCliNoColor(["why", "test-asset"]);
+    const output = runCliNoColor(["why", "test-asset", "--project"]);
     expect(output).toMatch(/why failed|not found|manifest/i);
+  });
+
+  it("rejects --global and --project together", () => {
+    const output = runCliNoColor(["status", "--global", "--project"]);
+    expect(output).toMatch(/cannot be used with|conflict/i);
   });
 });

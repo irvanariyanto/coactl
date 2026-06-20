@@ -6,7 +6,7 @@ import { readLockfile, writeLockfile, upsertLockEntry } from "../../registry/loc
 import { createSpinner, printHeader } from "../../ui/output.js";
 import { resolveManifestPath } from "../../io/global-paths.js";
 
-export async function updateAction(options: { global?: boolean }): Promise<void> {
+export async function updateAction(options: { global?: boolean; project?: boolean }): Promise<void> {
   printHeader("update");
 
   const spinner = createSpinner("Loading lockfile and sources...").start();
@@ -21,7 +21,7 @@ export async function updateAction(options: { global?: boolean }): Promise<void>
       return;
     }
 
-    const loaders = buildSourceLoaders(resolveManifestPath(options.global));
+    const loaders = buildSourceLoaders(resolveManifestPath(options));
     let changed = 0;
     let updated = lockfile;
 

@@ -8,7 +8,7 @@ import { createSpinner, printHeader } from "../../ui/output.js";
 import { resolveManifestPath } from "../../io/global-paths.js";
 import { BRAND } from "../../tui/theme.js";
 
-export async function installAction(idAtVersion: string, options: { global?: boolean }): Promise<void> {
+export async function installAction(idAtVersion: string, options: { global?: boolean; project?: boolean }): Promise<void> {
   p.intro(chalk.bgCyan(chalk.black(` ${BRAND} install `)));
   printHeader("install");
 
@@ -23,7 +23,7 @@ export async function installAction(idAtVersion: string, options: { global?: boo
   const spinner = createSpinner(`Searching sources for ${chalk.bold(id)}...`).start();
 
   try {
-    const manifestPath = resolveManifestPath(options.global);
+    const manifestPath = resolveManifestPath(options);
     const manifest = loadManifest(manifestPath);
     const loaders = buildSourceLoaders(manifestPath);
 

@@ -1,26 +1,30 @@
 import * as p from "@clack/prompts";
 import chalk from "chalk";
+import { dirname } from "node:path";
 import { buildSourceLoaders } from "../../sources/registry-of-sources.js";
 import { resolveRegistry } from "../../registry/resolve.js";
 import { transform } from "../../transform/engine.js";
 import { loadManifest } from "../../schema/load.js";
 import { writeFiles } from "../../io/write-files.js";
-import { globalRootDir, resolveManifestPath } from "../../io/global-paths.js";
+import { globalRootDir, resolveScope } from "../../io/global-paths.js";
 import { createSpinner, printHeader } from "../../ui/output.js";
 import type { AssetKind, Target } from "../../schema/index.js";
 
-export async function syncAction(options: { global?: boolean; kind?: string; target?: string }): Promise<void> {
+export async function syncAction(options: { global?: boolean; project?: boolean; kind?: string; target?: string }): Promise<void> {
   printHeader("sync");
 
-  const rootDir = options.global ? globalRootDir() : undefined;
-  if (options.global) {
+  const { path: manifestPath, scope } = resolveScope(options);
+  // rootDir must track the resolved scope (not just the raw --global flag) so an
+  // auto-detected project manifest writes next to itself, and an auto-fallback to
+  // global writes under the home dir — never a mismatched mix of the two.
+  const rootDir = scope === "global" ? globalRootDir() : dirname(manifestPath);
+  if (scope === "global") {
     p.log.message(`Syncing to global paths (${globalRootDir()})`);
   }
 
   const spinner = createSpinner("Loading manifest and sources...").start();
 
   try {
-    const manifestPath = resolveManifestPath(options.global);
     const manifest = loadManifest(manifestPath);
     const loaders = buildSourceLoaders(manifestPath);
 

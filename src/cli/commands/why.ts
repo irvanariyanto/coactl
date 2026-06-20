@@ -5,11 +5,11 @@ import { loadManifest } from "../../schema/load.js";
 import { createTable, printHeader } from "../../ui/output.js";
 import { resolveManifestPath } from "../../io/global-paths.js";
 
-export async function whyAction(id: string, options: { json?: boolean; global?: boolean }): Promise<void> {
+export async function whyAction(id: string, options: { json?: boolean; global?: boolean; project?: boolean }): Promise<void> {
   if (!options.json) printHeader(`why ${id}`);
 
   try {
-    const manifestPath = resolveManifestPath(options.global);
+    const manifestPath = resolveManifestPath(options);
     const manifest = loadManifest(manifestPath);
     const loaders = buildSourceLoaders(manifestPath);
     const allLoaded = [];

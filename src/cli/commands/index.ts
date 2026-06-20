@@ -1,4 +1,4 @@
-import type { Command } from "commander";
+import { Option, type Command } from "commander";
 import { initAction } from "./init.js";
 import { addAction } from "./add.js";
 import { sourceAddAction } from "./source.js";
@@ -17,6 +17,14 @@ export interface CommandSpec {
   name: string;
   description: string;
   configure?: (cmd: Command) => void;
+}
+
+// Default scope is auto-detected (walk up for agent.manifest.yaml, fall back to global).
+// --global and --project force a side explicitly and are mutually exclusive.
+function addManifestScopeOptions(cmd: Command, globalDescription: string): Command {
+  return cmd
+    .addOption(new Option("--global", globalDescription).conflicts("project"))
+    .addOption(new Option("--project", "use project manifest (errors instead of falling back to global)").conflicts("global"));
 }
 
 export const commandSpecs: CommandSpec[] = [
@@ -62,36 +70,35 @@ export const commandSpecs: CommandSpec[] = [
     name: "install",
     description: "Fetch and install an asset by id and version",
     configure: (cmd) => {
-      cmd.argument("<idAtVersion>", "asset id@version").option("--global", "use global manifest").action(installAction);
+      addManifestScopeOptions(cmd.argument("<idAtVersion>", "asset id@version"), "use global manifest").action(installAction);
     },
   },
   {
     name: "update",
     description: "Update installed assets",
     configure: (cmd) => {
-      cmd.option("--global", "use global manifest").action(updateAction);
+      addManifestScopeOptions(cmd, "use global manifest").action(updateAction);
     },
   },
   {
     name: "override",
     description: "Apply an override to an asset",
     configure: (cmd) => {
-      cmd.argument("<id>", "asset id").option("--global", "use global manifest").action(overrideAction);
+      addManifestScopeOptions(cmd.argument("<id>", "asset id"), "use global manifest").action(overrideAction);
     },
   },
   {
     name: "build",
     description: "Transform the registry into a target tool's native format",
     configure: (cmd) => {
-      cmd.option("--target <tool>", "target tool").option("--global", "use global manifest").action(buildAction);
+      addManifestScopeOptions(cmd.option("--target <tool>", "target tool"), "use global manifest").action(buildAction);
     },
   },
   {
     name: "sync",
     description: "Write native files for all configured targets",
     configure: (cmd) => {
-      cmd
-        .option("--global", "sync global scope")
+      addManifestScopeOptions(cmd, "sync global scope")
         .option("--kind <kind>", "limit sync to a kind")
         .action(syncAction);
     },
@@ -100,21 +107,21 @@ export const commandSpecs: CommandSpec[] = [
     name: "status",
     description: "Detect drift between generated files and the registry",
     configure: (cmd) => {
-      cmd.option("--json", "output as JSON").option("--global", "use global manifest").action(statusAction);
+      addManifestScopeOptions(cmd.option("--json", "output as JSON"), "use global manifest").action(statusAction);
     },
   },
   {
     name: "why",
     description: "Show the winning source and override chain for an asset",
     configure: (cmd) => {
-      cmd.argument("<id>", "asset id").option("--json", "output as JSON").option("--global", "use global manifest").action(whyAction);
+      addManifestScopeOptions(cmd.argument("<id>", "asset id").option("--json", "output as JSON"), "use global manifest").action(whyAction);
     },
   },
   {
     name: "explain",
     description: "Explain how an asset resolves",
     configure: (cmd) => {
-      cmd.argument("<id>", "asset id").option("--json", "output as JSON").option("--global", "use global manifest").action(explainAction);
+      addManifestScopeOptions(cmd.argument("<id>", "asset id").option("--json", "output as JSON"), "use global manifest").action(explainAction);
     },
   },
 ];

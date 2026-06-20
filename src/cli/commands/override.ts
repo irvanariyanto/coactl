@@ -6,15 +6,16 @@ import { parse, stringify } from "yaml";
 import { buildSourceLoaders } from "../../sources/registry-of-sources.js";
 import { resolveRegistry } from "../../registry/resolve.js";
 import { loadManifest } from "../../schema/load.js";
-import { resolveManifestPath } from "../../io/global-paths.js";
+import { resolveScope } from "../../io/global-paths.js";
 import { BRAND } from "../../tui/theme.js";
 
-export async function overrideAction(id: string, options: { global?: boolean }): Promise<void> {
+export async function overrideAction(id: string, options: { global?: boolean; project?: boolean }): Promise<void> {
   p.intro(chalk.bgCyan(chalk.black(` ${BRAND} override `)));
 
-  const manifestPath = resolve(resolveManifestPath(options.global));
+  const { path: resolvedPath, scope } = resolveScope(options);
+  const manifestPath = resolve(resolvedPath);
   if (!existsSync(manifestPath)) {
-    p.log.error(options.global ? "No global manifest found. Run coactl init --global first." : "No agent.manifest.yaml found in current directory.");
+    p.log.error(scope === "global" ? "No global manifest found. Run coactl init --global first." : `No agent.manifest.yaml found at ${manifestPath}. Run coactl init first.`);
     process.exitCode = 1;
     return;
   }

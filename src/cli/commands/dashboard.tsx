@@ -10,7 +10,7 @@ import { resolveRegistry } from "../../registry/resolve.js";
 import { transform } from "../../transform/engine.js";
 import { checkDrift } from "../../registry/drift.js";
 import { writeFiles } from "../../io/write-files.js";
-import { resolveManifestPath, globalRootDir } from "../../io/global-paths.js";
+import { resolveScope, globalRootDir } from "../../io/global-paths.js";
 import type { StatusKind } from "../../tui/components/StatusBadge.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -66,9 +66,9 @@ async function loadDashboardData(manifestPath: string): Promise<DashboardData> {
   return { assets, sources, conflicts: registry.conflicts };
 }
 
-export async function dashboardAction(options: { global?: boolean } = {}): Promise<void> {
-  const manifestPath = resolveManifestPath(options.global);
-  const rootDir = options.global ? globalRootDir() : undefined;
+export async function dashboardAction(options: { global?: boolean; project?: boolean } = {}): Promise<void> {
+  const { path: manifestPath, scope } = resolveScope(options);
+  const rootDir = scope === "global" ? globalRootDir() : dirname(manifestPath);
 
   let data: DashboardData;
   try {

@@ -7,13 +7,13 @@ import { checkDrift } from "../../registry/drift.js";
 import { createSpinner, createTable, printHeader } from "../../ui/output.js";
 import { resolveManifestPath } from "../../io/global-paths.js";
 
-export async function statusAction(options: { json?: boolean; global?: boolean }): Promise<void> {
+export async function statusAction(options: { json?: boolean; global?: boolean; project?: boolean }): Promise<void> {
   if (!options.json) printHeader("status");
 
   const spinner = createSpinner("Checking registry drift...").start();
 
   try {
-    const manifestPath = resolveManifestPath(options.global);
+    const manifestPath = resolveManifestPath(options);
     const manifest = loadManifest(manifestPath);
     const loaders = buildSourceLoaders(manifestPath);
     const allLoaded = [];
