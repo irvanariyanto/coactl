@@ -1,8 +1,47 @@
-# coactl
+<div align="center">
 
-Define agent assets once, sync them to multiple AI coding tools.
+```
+ ██████╗ ██████╗  █████╗  ██████╗████████╗██╗
+██╔════╝██╔═══██╗██╔══██╗██╔════╝╚══██╔══╝██║
+██║     ██║   ██║███████║██║        ██║   ██║
+██║     ██║   ██║██╔══██║██║        ██║   ██║
+╚██████╗╚██████╔╝██║  ██║╚██████╗   ██║   ███████╗
+ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝   ╚═╝   ╚══════╝
+```
 
-Maintain a single source of truth for your AI assistant configuration — skills, commands, rules, and workflows — and compile it to Claude Code, Cursor, Windsurf, and Copilot's native formats.
+**Define agent assets once. Sync them everywhere.**
+
+[![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue)](https://www.typescriptlang.org)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-134%20passing-brightgreen)](#development)
+
+</div>
+
+---
+
+`coactl` is a CLI tool that manages AI assistant configuration — skills, commands, rules, and workflows — as a single source of truth, then compiles and syncs them to each tool's native format.
+
+```
+  Your assets                      Native outputs
+  ──────────                       ──────────────
+  assets/
+    my-rule/             ──►  .claude/        (Claude Code)
+      asset.yaml         ──►  .cursor/rules/  (Cursor)
+      body.md            ──►  .windsurfrules  (Windsurf)
+                         ──►  .github/        (Copilot)
+```
+
+## Contents
+
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Concepts](#concepts)
+- [Commands](#commands)
+- [External Sources](#external-sources)
+- [Development](#development)
+
+---
 
 ## Installation
 
@@ -10,58 +49,73 @@ Maintain a single source of truth for your AI assistant configuration — skills
 npm install -g coactl
 ```
 
-Or run directly after cloning:
+Or run after cloning:
 
 ```bash
-npm install && npm run build
-node dist/cli/index.js --help
+git clone https://github.com/your-org/coactl
+cd coactl && npm install && npm run build
+npm link    # makes 'coactl' available globally
 ```
+
+---
 
 ## Quick Start
 
 ```bash
-# 1. Initialize a project
+# 1. Bootstrap a project
 coactl init
 
-# 2. Scaffold an asset
-coactl add --kind rule my-rule
+# 2. Author your first asset
+coactl add --kind rule my-coding-standards
 
-# 3. Edit assets/my-rule/body.md with your instructions
+# 3. Edit the body
+$EDITOR assets/my-coding-standards/body.md
 
-# 4. Preview what would be generated
+# 4. Preview generated files (dry run)
 coactl build --target claude-code
 
-# 5. Write native files to disk
+# 5. Sync to all tools
 coactl sync
+
+# 6. Open the interactive dashboard
+coactl dashboard
 ```
+
+---
 
 ## Concepts
 
-| Term | Description |
-|------|-------------|
-| **Asset** | A unit of AI guidance with a `kind`: `skill`, `command`, `rule`, or `workflow` |
-| **Source** | Where assets come from: `local`, `git`, `url`, or `package` |
-| **Registry** | The merged, resolved view across all sources |
-| **Adapter** | Transforms canonical assets into a tool's native format |
-
 ### Asset kinds
 
-| Kind | Claude Code | Cursor | Windsurf | Copilot |
-|------|-------------|--------|----------|---------|
-| `skill` | `.claude/skills/` | `.cursor/rules/` (degraded) | `.windsurfrules` (degraded) | `copilot-instructions.md` (degraded) |
-| `command` | `.claude/commands/` | `.cursor/rules/` (degraded) | skipped | skipped |
-| `rule` | `CLAUDE.md` | `.cursor/rules/` | `.windsurfrules` | `copilot-instructions.md` |
-| `workflow` | `.claude/commands/` | skipped | skipped | skipped |
+Each asset has a `kind` that determines how adapters emit it:
 
-## Project structure
+| Kind | Description | Example use case |
+|------|-------------|-----------------|
+| `rule` | Always-on guidance | Coding standards, style guides |
+| `skill` | Triggered by file patterns or agent decision | TypeScript review, test writing |
+| `command` | Explicitly invoked (e.g. `/review`) | Custom slash commands |
+| `workflow` | Multi-step orchestration with loops | Plan → implement → test cycles |
+
+### Tool compatibility matrix
+
+| Kind | Claude Code | Cursor | Windsurf | Copilot |
+|------|:-----------:|:------:|:--------:|:-------:|
+| `rule` | ✅ native | ✅ native | ✅ native | ✅ native |
+| `skill` | ✅ native | ⚠️ degraded | ⚠️ degraded | ⚠️ degraded |
+| `command` | ✅ native | ⚠️ degraded | ➖ skip | ➖ skip |
+| `workflow` | ✅ native | ➖ skip | ➖ skip | ➖ skip |
+
+✅ native · ⚠️ best-effort with warning · ➖ skipped with notice
+
+### Key files
 
 ```
-agent.manifest.yaml   # sources + precedence + overrides
-agent.lock.yaml       # integrity hashes (auto-generated)
-assets/
-  my-rule/
-    asset.yaml        # metadata
-    body.md           # instructions
+agent.manifest.yaml   ← sources, precedence, overrides (you edit this)
+agent.lock.yaml       ← integrity hashes           (auto-managed)
+assets/               ← your local assets           (you edit these)
+  <id>/
+    asset.yaml        ← metadata (kind, targets, activation, …)
+    body.md           ← the actual AI instructions
 ```
 
 ### agent.manifest.yaml
@@ -72,162 +126,212 @@ sources:
     type: local
     path: ./assets
 
-  # optional remote sources
-  - name: community
+  - name: team-shared          # optional remote source
     type: git
-    url: https://github.com/example/agent-skills.git
+    url: https://github.com/your-org/agent-skills.git
     ref: main
     subdir: assets
 
 resolution:
   precedence:
-    - local       # local wins on id conflict
-    - community
+    - local          # local assets win on id conflict
+    - team-shared
 
-overrides:
+overrides:           # customize remote assets without forking
   some-remote-rule:
-    targets: [claude-code]   # only sync to specific tools
-    patch: patches/my-override.md
+    targets: [claude-code]
+    patch: patches/custom-body.md
 ```
+
+---
 
 ## Commands
 
 ### `coactl init`
-Scaffold `agent.manifest.yaml` and create the `assets/` directory.
+Bootstrap a new project — creates `agent.manifest.yaml` and `assets/`.
 
 ```bash
-coactl init           # interactive
+coactl init           # interactive prompts
 coactl init --force   # overwrite existing manifest
 ```
 
+---
+
 ### `coactl add`
-Scaffold a new asset under `assets/<id>/`.
+Scaffold a new asset with kind-specific templates.
 
 ```bash
-coactl add --kind rule my-rule
-coactl add --kind skill my-skill
-coactl add --kind command my-cmd
+coactl add --kind rule     my-rule
+coactl add --kind skill    my-skill
+coactl add --kind command  my-cmd
 coactl add --kind workflow my-flow
-coactl add my-asset   # prompts for kind interactively
+coactl add my-asset        # prompts for kind interactively
+coactl add my-asset --force  # overwrite existing
 ```
 
+---
+
 ### `coactl build`
-Dry-run — show files that would be generated without writing to disk.
+Dry-run compile — shows what would be written without touching disk.
 
 ```bash
 coactl build --target claude-code
 coactl build --target cursor --kind rule
 ```
 
+---
+
 ### `coactl sync`
 Write native files to disk for all configured tools.
 
 ```bash
-coactl sync                        # all targets
-coactl sync --target cursor        # one tool only
-coactl sync --kind rule            # one kind only
-coactl sync --global               # write to ~/.claude/, ~/.cursor/, etc.
+coactl sync                      # all targets, project scope
+coactl sync --target cursor      # one tool only
+coactl sync --kind rule          # one kind only
+coactl sync --global             # write to ~/.claude/, ~/.cursor/, …
 ```
+
+---
 
 ### `coactl status`
-Detect drift between the registry and generated files.
+Detect drift between the registry and files on disk.
 
 ```bash
-coactl status
-coactl status --json    # CI-friendly output
+coactl status           # table output
+coactl status --json    # machine-readable (CI-friendly)
 ```
 
-Exit code 0 = clean, 1 = drift detected.
+Exit code `0` = clean · Exit code `1` = drift detected
+
+Drift states: `clean` · `modified` (hand-edited) · `stale` (registry changed) · `missing`
+
+---
 
 ### `coactl install`
-Fetch an asset from a remote source and record its integrity hash.
+Fetch a specific asset from a remote source and record its sha256 integrity hash.
 
 ```bash
-coactl install my-skill
-coactl install my-skill@1.0.0
+coactl install my-skill            # latest available
+coactl install my-skill@1.0.0     # pinned version
 ```
 
+---
+
 ### `coactl update`
-Refresh all read-only remote sources and update `agent.lock.yaml`.
+Re-resolve all remote sources to their latest ref and update `agent.lock.yaml`.
 
 ```bash
 coactl update
 ```
 
+---
+
 ### `coactl override`
-Scaffold an override block in `agent.manifest.yaml` for a remote asset.
+Scaffold an `overrides` block in the manifest to customize a remote asset.
 
 ```bash
 coactl override some-remote-rule
 ```
 
+---
+
 ### `coactl why`
-Show where an asset came from and what overrides were applied.
+Show where an asset came from, the full precedence chain, and applied overrides.
 
 ```bash
 coactl why my-rule
 coactl why my-rule --json
 ```
 
+---
+
 ### `coactl explain`
-Show how an asset maps to each tool — capability, output path, warnings.
+Show how an asset maps to each tool — capability, output path, diagnostics.
 
 ```bash
 coactl explain my-skill
 coactl explain my-skill --json
 ```
 
+---
+
 ### `coactl dashboard`
-Open the interactive TUI with panels for assets, details, and sources.
+Open the fullscreen interactive TUI.
 
 ```bash
 coactl dashboard
-# keyboard: Tab = switch panel, j/k = navigate, q = quit
 ```
 
-## Installing from external sources
+```
+┌─────────────────────────────────────────────────┐
+│ coactl — Dashboard                         v0.1 │
+├──────────────────────┬──────────────────────────┤
+│ Assets               │ Details                  │
+│ ❯ skill/review    ✓  │ Kind:    skill            │
+│   command/test    ✓  │ Version: 0.1.0            │
+│   rule/format     ⚠  │ Source:  local            │
+│   workflow/deploy ✗  │ Targets: claude, cursor   │
+├──────────────────────┴──────────────────────────┤
+│ Sources                                         │
+│ local  ./assets  4 assets                       │
+├─────────────────────────────────────────────────┤
+│ [Tab] panel  [j/k] nav  [Enter] select  [q] quit│
+└─────────────────────────────────────────────────┘
+```
 
-Add a remote source to `agent.manifest.yaml`, then use `coactl install`:
+---
 
-**Git repository:**
+## External Sources
+
+Three remote source types are supported. Add them to `agent.manifest.yaml`, then run `coactl install <id>`.
+
+**Git repository**
 ```yaml
 sources:
   - name: team-skills
     type: git
     url: https://github.com/your-org/agent-skills.git
     ref: main
-    subdir: assets
+    subdir: assets    # optional subdirectory
 ```
 
-**Tarball URL:**
+**Tarball URL**
 ```yaml
 sources:
-  - name: remote-pack
+  - name: release-pack
     type: url
-    url: https://example.com/skills-bundle.tar.gz
+    url: https://example.com/agent-skills-v1.tar.gz
 ```
 
-**npm package:**
+**npm-style package**
 ```yaml
 sources:
-  - name: npm-skills
+  - name: org-skills
     type: package
     registry: https://registry.npmjs.org
     install: "@your-org/agent-skills"
 ```
 
-External assets are read-only. Use `coactl override` to customize them without forking.
+> Remote assets are always **read-only**. Use `coactl override` to customize them locally without forking.
+
+---
 
 ## Development
 
 ```bash
-npm install
-npm run build        # compile TypeScript
-npm test             # run test suite
-npm run dev          # run CLI with tsx (no build needed)
-npm run dashboard    # open TUI
+npm install          # install dependencies
+npm run build        # compile TypeScript → dist/
+npm test             # run test suite (134 tests)
+npm run dev          # run CLI via tsx (no build step)
+npm run dashboard    # launch TUI directly
 ```
 
-## License
+**Tech stack:** TypeScript · ESM · Node ≥ 20 · commander · Ink (TUI) · clack · zod · yaml
 
-MIT
+---
+
+<div align="center">
+
+MIT License · Built with [Claude Code](https://claude.ai/code)
+
+</div>
