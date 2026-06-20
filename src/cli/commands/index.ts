@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { initAction } from "./init.js";
 import { addAction } from "./add.js";
 import { sourceAddAction } from "./source.js";
 import { installAction } from "./install.js";
@@ -17,6 +18,13 @@ export interface CommandSpec {
 }
 
 export const commandSpecs: CommandSpec[] = [
+  {
+    name: "init",
+    description: "Initialize a new coactl project (creates agent.manifest.yaml)",
+    configure: (cmd) => {
+      cmd.option("--force", "overwrite existing manifest").action(initAction);
+    },
+  },
   {
     name: "add",
     description: "Scaffold a schema-valid asset",
