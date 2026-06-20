@@ -21,11 +21,24 @@ export interface ImportedAsset {
 function sourcePath(tool: ToolSource, global?: boolean): string {
   const base = global ? homedir() : process.cwd();
   switch (tool) {
-    case "claude-code": return join(homedir(), ".claude", "skills");
-    case "cursor":      return join(homedir(), ".cursor", "rules");
-    case "windsurf":    return join(homedir(), ".windsurfrules");
-    case "copilot":     return join(homedir(), ".github", "copilot-instructions.md");
+    case "claude-code": return join(base, ".claude", "skills");
+    case "cursor":      return join(base, ".cursor", "rules");
+    case "windsurf":    return join(base, ".windsurfrules");
+    case "copilot":     return join(base, ".github", "copilot-instructions.md");
   }
+}
+
+const SOURCE_REL: Record<ToolSource, string> = {
+  "claude-code": ".claude/skills/",
+  "cursor": ".cursor/rules/",
+  "windsurf": ".windsurfrules",
+  "copilot": ".github/copilot-instructions.md",
+};
+
+// Human-readable location hint, prefixed with ~/ for global scope and left
+// cwd-relative for project scope — matching where sourcePath actually reads.
+export function sourceHint(tool: ToolSource, global?: boolean): string {
+  return (global ? "~/" : "") + SOURCE_REL[tool];
 }
 
 function stripCoactlHeader(content: string): string {
@@ -130,10 +143,10 @@ export async function importAction(
     const picked = await p.select({
       message: "Import from which tool?",
       options: [
-        { value: "claude-code", label: "Claude Code", hint: "~/.claude/skills/" },
-        { value: "cursor",      label: "Cursor",      hint: ".cursor/rules/" },
-        { value: "windsurf",    label: "Windsurf",    hint: ".windsurfrules" },
-        { value: "copilot",     label: "Copilot",     hint: ".github/copilot-instructions.md" },
+        { value: "claude-code", label: "Claude Code", hint: sourceHint("claude-code", options.global) },
+        { value: "cursor",      label: "Cursor",      hint: sourceHint("cursor", options.global) },
+        { value: "windsurf",    label: "Windsurf",    hint: sourceHint("windsurf", options.global) },
+        { value: "copilot",     label: "Copilot",     hint: sourceHint("copilot", options.global) },
       ],
     });
     if (p.isCancel(picked)) {

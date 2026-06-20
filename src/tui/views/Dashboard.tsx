@@ -203,6 +203,7 @@ export function Dashboard({ version, data: initialData, onSync, onRefresh, onUpd
         onImport={onImport}
         rows={rows}
         columns={columns}
+        global={liveData.scope === "global"}
       />
     );
   }

@@ -1,6 +1,6 @@
 import { withFullScreen } from "fullscreen-ink";
 import chalk from "chalk";
-import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Dashboard, type DashboardData, type DashboardAsset, type SyncResult } from "../../tui/views/Dashboard.js";
@@ -46,10 +46,11 @@ async function loadScopeData(
     const assetDrift = driftEntries.filter((d) => d.assetId === ra.asset.id);
     let status: StatusKind;
     if (assetDrift.length === 0) {
-      status = "missing";
+      // No files emitted (all targets skip this kind) — nothing to be out of sync with.
+      status = "synced";
     } else if (assetDrift.some((d) => d.status === "modified" || d.status === "stale")) {
       status = "drifted";
-    } else if (assetDrift.every((d) => d.status === "missing")) {
+    } else if (assetDrift.some((d) => d.status === "missing")) {
       status = "missing";
     } else {
       status = "synced";
@@ -145,7 +146,10 @@ export async function dashboardAction(options: { global?: boolean; project?: boo
   const globalPath = globalManifestPath();
   const projectManifestFound = !options.global ? findProjectManifest() : undefined;
   const isProject = !!projectManifestFound;
-  const projectRoot = isProject ? dirname(projectManifestFound!) : undefined;
+  // Native files (.claude/, .cursor/, …) live at the project root — the parent of the
+  // .coactl/ dir that holds the manifest. This must match CLI sync (dirname(dirname(manifest))).
+  const projectManifestDir = isProject ? dirname(projectManifestFound!) : undefined;
+  const projectRoot = isProject ? dirname(projectManifestDir!) : undefined;
   const dataScope: DashboardData["scope"] = isProject ? "project+global" : "global";
 
   let data: DashboardData;
@@ -204,14 +208,20 @@ export async function dashboardAction(options: { global?: boolean; project?: boo
     };
   };
 
+  // Read from the project's tool dirs when a project manifest is in scope, else the
+  // global (home) tool dirs — matching where the imported assets will be written.
+  const importGlobal = !isProject;
+
   const onListImportAssets = async (tool: ImportTool): Promise<ImportCandidate[]> => {
-    const assets = listAssets(tool as ToolSource);
+    const assets = listAssets(tool as ToolSource, importGlobal);
     return assets.map((a) => ({ id: a.id, kind: a.kind }));
   };
 
   const onImport = async (tool: ImportTool, ids: string[]): Promise<{ imported: number; errors: string[] }> => {
-    const assets = listAssets(tool as ToolSource);
-    const root = isProject && projectRoot ? projectRoot : globalConfigDir();
+    const assets = listAssets(tool as ToolSource, importGlobal);
+    // Imported assets are authored sources, so they go in the manifest's .coactl/ dir
+    // (project) or the global config dir — not the native-output project root.
+    const root = isProject && projectManifestDir ? projectManifestDir : globalConfigDir();
     let imported = 0;
     const errors: string[] = [];
     for (const id of ids) {
@@ -220,6 +230,8 @@ export async function dashboardAction(options: { global?: boolean; project?: boo
       try {
         const { dir, file } = assetPath(asset.kind, id, root);
         const fullPath = join(dir, file);
+        // Guard against clobbering an existing authored asset (CLI import requires --force).
+        if (existsSync(fullPath)) { errors.push(`${id}: already exists (skipped)`); continue; }
         mkdirSync(dir, { recursive: true });
         writeFileSync(fullPath, renderClaudeAssetFrontmatter({ id: asset.id, kind: asset.kind }) + asset.body);
         imported++;

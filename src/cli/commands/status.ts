@@ -1,11 +1,12 @@
 import chalk from "chalk";
+import { dirname, resolve } from "node:path";
 import { buildSourceLoaders } from "../../sources/registry-of-sources.js";
 import { resolveRegistry } from "../../registry/resolve.js";
 import { loadManifest } from "../../schema/load.js";
 import { transform } from "../../transform/engine.js";
 import { checkDrift } from "../../registry/drift.js";
 import { createSpinner, createTable, printHeader } from "../../ui/output.js";
-import { resolveManifestPath } from "../../io/global-paths.js";
+import { globalRootDir, resolveScope } from "../../io/global-paths.js";
 
 export async function statusAction(options: { json?: boolean; global?: boolean; project?: boolean }): Promise<void> {
   if (!options.json) printHeader("status");
@@ -13,7 +14,10 @@ export async function statusAction(options: { json?: boolean; global?: boolean; 
   const spinner = createSpinner("Checking registry drift...").start();
 
   try {
-    const manifestPath = resolveManifestPath(options);
+    const { path: manifestPath, scope } = resolveScope(options);
+    // Drift must be checked against the same root sync writes to (project root or home),
+    // not the cwd — otherwise `status --global` or status from a subdir reports false misses.
+    const rootDir = scope === "global" ? globalRootDir() : dirname(dirname(resolve(manifestPath)));
     const manifest = loadManifest(manifestPath);
     const loaders = buildSourceLoaders(manifestPath);
     const allLoaded = [];
@@ -24,7 +28,7 @@ export async function statusAction(options: { json?: boolean; global?: boolean; 
 
     const registry = resolveRegistry(allLoaded, manifest);
     const { files, diagnostics } = transform(registry, manifest);
-    const drift = checkDrift(files);
+    const drift = checkDrift(files, rootDir);
     spinner.stop();
 
     const hasDrift = drift.some((d) => d.status !== "clean");

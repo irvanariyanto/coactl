@@ -1,12 +1,13 @@
 import { Box, Text, useInput } from "ink";
 import { useState } from "react";
 import { Panel } from "./Panel.js";
+import { sourceHint } from "../../cli/commands/import.js";
 
 const TOOLS = [
-  { value: "claude-code" as const, label: "Claude Code", hint: "~/.claude/skills/" },
-  { value: "cursor" as const, label: "Cursor", hint: ".cursor/rules/*.mdc" },
-  { value: "windsurf" as const, label: "Windsurf", hint: ".windsurfrules" },
-  { value: "copilot" as const, label: "Copilot", hint: ".github/copilot-instructions.md" },
+  { value: "claude-code" as const, label: "Claude Code" },
+  { value: "cursor" as const, label: "Cursor" },
+  { value: "windsurf" as const, label: "Windsurf" },
+  { value: "copilot" as const, label: "Copilot" },
 ];
 
 export type ImportTool = typeof TOOLS[number]["value"];
@@ -22,6 +23,7 @@ interface ImportViewProps {
   onImport: (tool: ImportTool, ids: string[]) => Promise<{ imported: number; errors: string[] }>;
   rows: number;
   columns: number;
+  global: boolean;
 }
 
 type Step =
@@ -32,7 +34,7 @@ type Step =
   | { kind: "done"; imported: number; errors: string[] }
   | { kind: "error"; message: string };
 
-export function ImportView({ onCancel, onListAssets, onImport, rows, columns }: ImportViewProps) {
+export function ImportView({ onCancel, onListAssets, onImport, rows, columns, global }: ImportViewProps) {
   const [step, setStep] = useState<Step>({ kind: "tool-pick" });
   const [toolIndex, setToolIndex] = useState(0);
   const [assetIndex, setAssetIndex] = useState(0);
@@ -106,7 +108,7 @@ export function ImportView({ onCancel, onListAssets, onImport, rows, columns }: 
                 <Text bold={i === toolIndex} color={i === toolIndex ? "cyan" : undefined}>
                   {t.label}
                 </Text>
-                <Text dimColor>{t.hint}</Text>
+                <Text dimColor>{sourceHint(t.value, global)}</Text>
               </Box>
             ))}
           </Box>
