@@ -1,10 +1,9 @@
 import * as p from "@clack/prompts";
 import chalk from "chalk";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { homedir } from "node:os";
 import { renderClaudeAssetFrontmatter } from "../../scaffold/templates.js";
-import { parseHeader } from "../../transform/header.js";
 import { globalConfigDir } from "../../io/global-paths.js";
 import { BRAND } from "../../tui/theme.js";
 import type { AssetKind } from "../../schema/index.js";
@@ -69,11 +68,17 @@ export function listAssets(tool: ToolSource, global?: boolean): ImportedAsset[] 
 
   if (tool === "claude-code") {
     if (!existsSync(path)) return [];
-    return readdirSync(path, { withFileTypes: true })
-      .filter((d) => d.isDirectory() && existsSync(join(path, d.name, "SKILL.md")))
-      .map((d) => {
-        const raw = readFileSync(join(path, d.name, "SKILL.md"), "utf-8");
-        return { id: d.name, kind: "skill" as AssetKind, body: parseHeader(raw) ? stripCoactlHeader(raw) : raw };
+    // statSync (not Dirent.isDirectory) so symlinked skill dirs — e.g. plugin-installed
+    // skills — are detected; Dirent.isDirectory() ignores what a symlink points to.
+    // existsSync first since a dangling symlink would otherwise throw in statSync.
+    return readdirSync(path)
+      .filter((name) => existsSync(join(path, name)) && statSync(join(path, name)).isDirectory() && existsSync(join(path, name, "SKILL.md")))
+      .map((name) => {
+        const raw = readFileSync(join(path, name, "SKILL.md"), "utf-8");
+        // Claude Code skills always use YAML frontmatter (never the HTML-comment header
+        // used by windsurf/cursor/copilot) — parseHeader/stripCoactlHeader never match
+        // here, so the frontmatter was never stripped and ended up duplicated in the body.
+        return { id: name, kind: "skill" as AssetKind, body: stripYamlFrontmatter(raw) };
       });
   }
 

@@ -4,7 +4,7 @@ import { buildSourceLoaders } from "../../sources/registry-of-sources.js";
 import { computeIntegrity } from "../../registry/integrity.js";
 import { readLockfile, writeLockfile, upsertLockEntry } from "../../registry/lockfile.js";
 import { createSpinner, printHeader } from "../../ui/output.js";
-import { resolveManifestPath } from "../../io/global-paths.js";
+import { resolveManifestPath, resolveLockfilePath } from "../../io/global-paths.js";
 
 export async function updateAction(options: { global?: boolean; project?: boolean }): Promise<void> {
   printHeader("update");
@@ -12,7 +12,8 @@ export async function updateAction(options: { global?: boolean; project?: boolea
   const spinner = createSpinner("Loading lockfile and sources...").start();
 
   try {
-    const lockfile = readLockfile();
+    const lockfilePath = resolveLockfilePath(options);
+    const lockfile = readLockfile(lockfilePath);
     const ids = Object.keys(lockfile.assets);
 
     if (ids.length === 0) {
@@ -42,7 +43,7 @@ export async function updateAction(options: { global?: boolean; project?: boolea
       }
     }
 
-    writeLockfile(updated);
+    writeLockfile(updated, lockfilePath);
     spinner.stop();
 
     if (changed === 0) {

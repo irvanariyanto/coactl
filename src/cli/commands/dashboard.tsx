@@ -3,14 +3,14 @@ import chalk from "chalk";
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Dashboard, type DashboardData, type DashboardAsset, type SyncResult } from "../../tui/views/Dashboard.js";
+import { Dashboard, type DashboardData, type DashboardAsset, type SyncResult, type DashboardProps } from "../../tui/views/Dashboard.js";
 import { loadManifest } from "../../schema/load.js";
 import { buildSourceLoaders } from "../../sources/registry-of-sources.js";
 import { resolveRegistry } from "../../registry/resolve.js";
 import { transform } from "../../transform/engine.js";
 import { checkDrift } from "../../registry/drift.js";
 import { writeFiles } from "../../io/write-files.js";
-import { globalManifestPath, globalRootDir, globalConfigDir, findProjectManifest } from "../../io/global-paths.js";
+import { globalManifestPath, globalRootDir, globalConfigDir, findProjectManifest, lockfilePathForManifest } from "../../io/global-paths.js";
 import { computeIntegrity } from "../../registry/integrity.js";
 import { readLockfile, writeLockfile, upsertLockEntry } from "../../registry/lockfile.js";
 import type { StatusKind } from "../../tui/components/StatusBadge.js";
@@ -93,7 +93,8 @@ async function syncScope(manifestPath: string, rootDir: string): Promise<SyncRes
 
 async function updateScope(manifestPath: string): Promise<{ updated: number; errors: string[] }> {
   try {
-    const lockfile = readLockfile();
+    const lockfilePath = lockfilePathForManifest(manifestPath);
+    const lockfile = readLockfile(lockfilePath);
     const ids = Object.keys(lockfile.assets);
     if (ids.length === 0) return { updated: 0, errors: [] };
 
@@ -121,7 +122,7 @@ async function updateScope(manifestPath: string): Promise<{ updated: number; err
       }
     }
 
-    writeLockfile(updated);
+    writeLockfile(updated, lockfilePath);
     return { updated: changed, errors: [] };
   } catch (err) {
     return { updated: 0, errors: [(err as Error).message] };
@@ -141,7 +142,11 @@ function mergeData(
   };
 }
 
-export async function dashboardAction(options: { global?: boolean; project?: boolean } = {}): Promise<void> {
+// Builds the data + handlers Dashboard needs, without touching the terminal — split out
+// from dashboardAction so the real wiring (scope resolution, lockfile paths, import
+// scope) can be exercised in tests via ink-testing-library, instead of only by eye
+// through the fullscreen TUI.
+export async function buildDashboardProps(options: { global?: boolean; project?: boolean } = {}): Promise<DashboardProps> {
   const globalRoot = globalRootDir();
   const globalPath = globalManifestPath();
   const projectManifestFound = !options.global ? findProjectManifest() : undefined;
@@ -152,24 +157,17 @@ export async function dashboardAction(options: { global?: boolean; project?: boo
   const projectRoot = isProject ? dirname(projectManifestDir!) : undefined;
   const dataScope: DashboardData["scope"] = isProject ? "project+global" : "global";
 
-  let data: DashboardData;
-  try {
-    const [globalData, projectData] = await Promise.all([
-      loadScopeData(globalPath, "global", globalRoot).catch(() => ({
-        assets: [] as DashboardAsset[],
-        sources: [],
-        conflicts: [],
-      })),
-      isProject
-        ? loadScopeData(projectManifestFound!, "project", projectRoot!)
-        : Promise.resolve(null),
-    ]);
-    data = mergeData(globalData, projectData, dataScope);
-  } catch (err) {
-    console.error(chalk.red(`Dashboard: ${(err as Error).message}`));
-    process.exitCode = 1;
-    return;
-  }
+  const [globalData, projectData] = await Promise.all([
+    loadScopeData(globalPath, "global", globalRoot).catch(() => ({
+      assets: [] as DashboardAsset[],
+      sources: [],
+      conflicts: [],
+    })),
+    isProject
+      ? loadScopeData(projectManifestFound!, "project", projectRoot!)
+      : Promise.resolve(null),
+  ]);
+  const data = mergeData(globalData, projectData, dataScope);
 
   const onSync = async (): Promise<SyncResult> => {
     const [globalResult, projectResult] = await Promise.all([
@@ -208,9 +206,9 @@ export async function dashboardAction(options: { global?: boolean; project?: boo
     };
   };
 
-  // Read from the project's tool dirs when a project manifest is in scope, else the
-  // global (home) tool dirs — matching where the imported assets will be written.
-  const importGlobal = !isProject;
+  // Mirrors the CLI's import command: project-relative (cwd) unless --global, independent
+  // of whether a .coactl manifest exists yet — importing is valid before `coactl init`.
+  const importGlobal = !!options.global;
 
   const onListImportAssets = async (tool: ImportTool): Promise<ImportCandidate[]> => {
     const assets = listAssets(tool as ToolSource, importGlobal);
@@ -219,9 +217,7 @@ export async function dashboardAction(options: { global?: boolean; project?: boo
 
   const onImport = async (tool: ImportTool, ids: string[]): Promise<{ imported: number; errors: string[] }> => {
     const assets = listAssets(tool as ToolSource, importGlobal);
-    // Imported assets are authored sources, so they go in the manifest's .coactl/ dir
-    // (project) or the global config dir — not the native-output project root.
-    const root = isProject && projectManifestDir ? projectManifestDir : globalConfigDir();
+    const root = importGlobal ? globalConfigDir() : join(process.cwd(), ".coactl");
     let imported = 0;
     const errors: string[] = [];
     for (const id of ids) {
@@ -246,17 +242,29 @@ export async function dashboardAction(options: { global?: boolean; project?: boo
     readFileSync(join(__dirname, "..", "..", "..", "package.json"), "utf-8"),
   ) as { version: string };
 
-  const app = withFullScreen(
-    <Dashboard
-      version={pkg.version}
-      data={data}
-      onSync={onSync}
-      onRefresh={onRefresh}
-      onUpdate={onUpdate}
-      onListImportAssets={onListImportAssets}
-      onImport={onImport}
-    />,
-  );
+  return {
+    version: pkg.version,
+    data,
+    onSync,
+    onRefresh,
+    onUpdate,
+    onListImportAssets,
+    onImport,
+    importGlobal,
+  };
+}
+
+export async function dashboardAction(options: { global?: boolean; project?: boolean } = {}): Promise<void> {
+  let props: DashboardProps;
+  try {
+    props = await buildDashboardProps(options);
+  } catch (err) {
+    console.error(chalk.red(`Dashboard: ${(err as Error).message}`));
+    process.exitCode = 1;
+    return;
+  }
+
+  const app = withFullScreen(<Dashboard {...props} />);
   app.start();
   await app.waitUntilExit();
 }

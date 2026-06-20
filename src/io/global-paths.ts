@@ -60,6 +60,17 @@ export function resolveManifestPath(options: ManifestScopeOptions = {}): string 
   return resolveScope(options).path;
 }
 
+// Lockfile lives alongside whichever manifest is in scope — install/update/dashboard
+// must use this instead of the bare "./agent.lock.yaml" default, otherwise --global
+// (or running from a project subdirectory) silently reads/writes the wrong lockfile.
+export function resolveLockfilePath(options: ManifestScopeOptions = {}): string {
+  return join(dirname(resolveManifestPath(options)), "agent.lock.yaml");
+}
+
+export function lockfilePathForManifest(manifestPath: string): string {
+  return join(dirname(manifestPath), "agent.lock.yaml");
+}
+
 export function globalBasePath(target: Target): string {
   const home = homedir();
   switch (target) {

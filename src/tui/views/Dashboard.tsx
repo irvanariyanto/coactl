@@ -71,7 +71,7 @@ type ScopeFilter = "all" | "global" | "project";
 
 const PANEL_NAMES = ["assets", "details", "sources"] as const;
 
-interface DashboardProps {
+export interface DashboardProps {
   version: string;
   data: DashboardData;
   onSync: () => Promise<SyncResult>;
@@ -79,9 +79,10 @@ interface DashboardProps {
   onUpdate: () => Promise<{ updated: number; errors: string[] }>;
   onListImportAssets: (tool: ImportTool) => Promise<ImportCandidate[]>;
   onImport: (tool: ImportTool, ids: string[]) => Promise<{ imported: number; errors: string[] }>;
+  importGlobal: boolean;
 }
 
-export function Dashboard({ version, data: initialData, onSync, onRefresh, onUpdate, onListImportAssets, onImport }: DashboardProps) {
+export function Dashboard({ version, data: initialData, onSync, onRefresh, onUpdate, onListImportAssets, onImport, importGlobal }: DashboardProps) {
   const { exit } = useApp();
   const { rows, columns } = useTerminalSize();
   const [liveData, setLiveData] = useState(initialData);
@@ -203,7 +204,7 @@ export function Dashboard({ version, data: initialData, onSync, onRefresh, onUpd
         onImport={onImport}
         rows={rows}
         columns={columns}
-        global={liveData.scope === "global"}
+        global={importGlobal}
       />
     );
   }

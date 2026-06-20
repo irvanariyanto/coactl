@@ -9,7 +9,7 @@ export interface WriteSummary {
 }
 
 // Files that should be merged rather than replaced
-const MANAGED_AGGREGATE_FILES = new Set([
+export const MANAGED_AGGREGATE_FILES = new Set([
   "CLAUDE.md",
   ".windsurfrules",
   ".github/copilot-instructions.md",

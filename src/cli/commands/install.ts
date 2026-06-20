@@ -5,7 +5,7 @@ import { loadManifest } from "../../schema/load.js";
 import { computeIntegrity } from "../../registry/integrity.js";
 import { readLockfile, writeLockfile, upsertLockEntry } from "../../registry/lockfile.js";
 import { createSpinner, printHeader } from "../../ui/output.js";
-import { resolveManifestPath } from "../../io/global-paths.js";
+import { resolveManifestPath, resolveLockfilePath } from "../../io/global-paths.js";
 import { BRAND } from "../../tui/theme.js";
 
 export async function installAction(idAtVersion: string, options: { global?: boolean; project?: boolean }): Promise<void> {
@@ -47,9 +47,10 @@ export async function installAction(idAtVersion: string, options: { global?: boo
     }
 
     const integrity = computeIntegrity(foundAsset.dir);
-    const lockfile = readLockfile();
+    const lockfilePath = resolveLockfilePath(options);
+    const lockfile = readLockfile(lockfilePath);
     const updated = upsertLockEntry(lockfile, id, { source: foundAsset.sourceName, version: foundAsset.version, integrity });
-    writeLockfile(updated);
+    writeLockfile(updated, lockfilePath);
 
     p.log.success(`Found ${chalk.bold(id)} in source ${chalk.cyan(foundAsset.sourceName)}`);
     p.log.message(`Version:   ${chalk.dim(foundAsset.version ?? "unknown")}`);
