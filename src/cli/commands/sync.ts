@@ -1,6 +1,6 @@
 import * as p from "@clack/prompts";
 import chalk from "chalk";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { buildSourceLoaders } from "../../sources/registry-of-sources.js";
 import { resolveRegistry } from "../../registry/resolve.js";
 import { transform } from "../../transform/engine.js";
@@ -17,7 +17,7 @@ export async function syncAction(options: { global?: boolean; project?: boolean;
   // rootDir must track the resolved scope (not just the raw --global flag) so an
   // auto-detected project manifest writes next to itself, and an auto-fallback to
   // global writes under the home dir — never a mismatched mix of the two.
-  const rootDir = scope === "global" ? globalRootDir() : dirname(manifestPath);
+  const rootDir = scope === "global" ? globalRootDir() : dirname(dirname(resolve(manifestPath)));
   if (scope === "global") {
     p.log.message(`Syncing to global paths (${globalRootDir()})`);
   }
