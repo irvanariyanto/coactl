@@ -9,10 +9,10 @@ import { globalConfigDir } from "../../io/global-paths.js";
 import { BRAND } from "../../tui/theme.js";
 import type { AssetKind } from "../../schema/index.js";
 
-type ToolSource = "claude-code" | "cursor" | "windsurf" | "copilot";
+export type ToolSource = "claude-code" | "cursor" | "windsurf" | "copilot";
 const VALID_SOURCES: ToolSource[] = ["claude-code", "cursor", "windsurf", "copilot"];
 
-interface ImportedAsset {
+export interface ImportedAsset {
   id: string;
   kind: AssetKind;
   body: string;
@@ -51,7 +51,7 @@ function extractCoactlBlocks(content: string): Array<{ id: string; body: string 
   return blocks;
 }
 
-function listAssets(tool: ToolSource, global?: boolean): ImportedAsset[] {
+export function listAssets(tool: ToolSource, global?: boolean): ImportedAsset[] {
   const path = sourcePath(tool, global);
 
   if (tool === "claude-code") {
@@ -87,7 +87,7 @@ function listAssets(tool: ToolSource, global?: boolean): ImportedAsset[] {
   return [{ id, kind: "rule" as AssetKind, body: content.trimStart() }];
 }
 
-function assetPath(kind: AssetKind, id: string, root: string): { dir: string; file: string } {
+export function assetPath(kind: AssetKind, id: string, root: string): { dir: string; file: string } {
   switch (kind) {
     case "skill":    return { dir: join(root, "skills",    id), file: "SKILL.md" };
     case "command":  return { dir: join(root, "commands",  id), file: "COMMAND.md" };

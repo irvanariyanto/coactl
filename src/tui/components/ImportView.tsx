@@ -1,0 +1,163 @@
+import { Box, Text, useInput } from "ink";
+import { useState } from "react";
+import { Panel } from "./Panel.js";
+
+const TOOLS = [
+  { value: "claude-code" as const, label: "Claude Code", hint: "~/.claude/skills/" },
+  { value: "cursor" as const, label: "Cursor", hint: ".cursor/rules/*.mdc" },
+  { value: "windsurf" as const, label: "Windsurf", hint: ".windsurfrules" },
+  { value: "copilot" as const, label: "Copilot", hint: ".github/copilot-instructions.md" },
+];
+
+export type ImportTool = typeof TOOLS[number]["value"];
+
+export interface ImportCandidate {
+  id: string;
+  kind: string;
+}
+
+interface ImportViewProps {
+  onCancel: () => void;
+  onListAssets: (tool: ImportTool) => Promise<ImportCandidate[]>;
+  onImport: (tool: ImportTool, ids: string[]) => Promise<{ imported: number; errors: string[] }>;
+  rows: number;
+  columns: number;
+}
+
+type Step =
+  | { kind: "tool-pick" }
+  | { kind: "loading" }
+  | { kind: "asset-pick"; tool: ImportTool; assets: ImportCandidate[] }
+  | { kind: "importing" }
+  | { kind: "done"; imported: number; errors: string[] }
+  | { kind: "error"; message: string };
+
+export function ImportView({ onCancel, onListAssets, onImport, rows, columns }: ImportViewProps) {
+  const [step, setStep] = useState<Step>({ kind: "tool-pick" });
+  const [toolIndex, setToolIndex] = useState(0);
+  const [assetIndex, setAssetIndex] = useState(0);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  useInput((input, key) => {
+    if (step.kind === "loading" || step.kind === "importing") return;
+
+    if (key.escape || input === "q") {
+      if (step.kind === "asset-pick") {
+        setStep({ kind: "tool-pick" });
+        setSelected(new Set());
+        return;
+      }
+      onCancel();
+      return;
+    }
+
+    if (step.kind === "tool-pick") {
+      if (input === "j" || key.downArrow) setToolIndex((i) => Math.min(i + 1, TOOLS.length - 1));
+      if (input === "k" || key.upArrow) setToolIndex((i) => Math.max(i - 1, 0));
+      if (key.return) {
+        const tool = TOOLS[toolIndex]?.value;
+        if (!tool) return;
+        setStep({ kind: "loading" });
+        onListAssets(tool)
+          .then((assets) => {
+            setAssetIndex(0);
+            setSelected(new Set());
+            setStep({ kind: "asset-pick", tool, assets });
+          })
+          .catch((err: Error) => setStep({ kind: "error", message: err.message }));
+      }
+    } else if (step.kind === "asset-pick") {
+      if (input === "j" || key.downArrow) setAssetIndex((i) => Math.min(i + 1, step.assets.length - 1));
+      if (input === "k" || key.upArrow) setAssetIndex((i) => Math.max(i - 1, 0));
+      if (input === " ") {
+        const id = step.assets[assetIndex]?.id;
+        if (!id) return;
+        setSelected((prev) => {
+          const next = new Set(prev);
+          next.has(id) ? next.delete(id) : next.add(id);
+          return next;
+        });
+      }
+      if (input === "a") {
+        setSelected((prev) =>
+          prev.size === step.assets.length ? new Set() : new Set(step.assets.map((a) => a.id)),
+        );
+      }
+      if (key.return && selected.size > 0) {
+        setStep({ kind: "importing" });
+        onImport(step.tool, [...selected])
+          .then((r) => setStep({ kind: "done", imported: r.imported, errors: r.errors }))
+          .catch((err: Error) => setStep({ kind: "error", message: err.message }));
+      }
+    } else if (step.kind === "done" || step.kind === "error") {
+      if (key.return || input === "q") onCancel();
+    }
+  });
+
+  return (
+    <Box flexDirection="column" width={columns} height={rows} overflow="hidden">
+      <Panel title="Import assets" active width={columns} height={rows}>
+        {step.kind === "tool-pick" && (
+          <Box flexDirection="column" gap={1}>
+            <Text dimColor>[j/k] nav  [Enter] select  [q] cancel</Text>
+            {TOOLS.map((t, i) => (
+              <Box key={t.value} gap={2}>
+                <Text color={i === toolIndex ? "cyan" : undefined}>{i === toolIndex ? "❯" : " "}</Text>
+                <Text bold={i === toolIndex} color={i === toolIndex ? "cyan" : undefined}>
+                  {t.label}
+                </Text>
+                <Text dimColor>{t.hint}</Text>
+              </Box>
+            ))}
+          </Box>
+        )}
+
+        {step.kind === "loading" && <Text dimColor>Discovering assets...</Text>}
+
+        {step.kind === "asset-pick" && (
+          <Box flexDirection="column" gap={1}>
+            <Text dimColor>
+              {step.assets.length} asset{step.assets.length !== 1 ? "s" : ""} in {step.tool}
+              {"  "}[j/k] nav  [Space] toggle  [a] all  [Enter] import ({selected.size} selected)  [q] back
+            </Text>
+            {step.assets.length === 0 && <Text dimColor>No importable assets found.</Text>}
+            {step.assets.map((a, i) => (
+              <Box key={a.id} gap={2}>
+                <Text color={i === assetIndex ? "cyan" : undefined}>{i === assetIndex ? "❯" : " "}</Text>
+                <Text color={selected.has(a.id) ? "green" : "gray"}>{selected.has(a.id) ? "◉" : "○"}</Text>
+                <Text bold={i === assetIndex} color={i === assetIndex ? "cyan" : undefined}>
+                  {a.id}
+                </Text>
+                <Text dimColor>[{a.kind}]</Text>
+              </Box>
+            ))}
+          </Box>
+        )}
+
+        {step.kind === "importing" && <Text dimColor>Importing...</Text>}
+
+        {step.kind === "done" && (
+          <Box flexDirection="column" gap={1}>
+            <Text color={step.errors.length > 0 ? "yellow" : "green"}>
+              ✓ Imported {step.imported} asset{step.imported !== 1 ? "s" : ""}
+              {step.errors.length > 0 ? `, ${step.errors.length} error(s)` : "  — run sync to write files"}
+            </Text>
+            {step.errors.map((e, i) => (
+              <Text key={i} color="red" dimColor>
+                {e}
+              </Text>
+            ))}
+            <Text dimColor>Press Enter or q to return.</Text>
+          </Box>
+        )}
+
+        {step.kind === "error" && (
+          <Box flexDirection="column" gap={1}>
+            <Text color="red">✗ {step.message}</Text>
+            <Text dimColor>Press Enter or q to return.</Text>
+          </Box>
+        )}
+      </Panel>
+    </Box>
+  );
+}

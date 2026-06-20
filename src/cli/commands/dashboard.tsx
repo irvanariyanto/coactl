@@ -1,6 +1,6 @@
 import { withFullScreen } from "fullscreen-ink";
 import chalk from "chalk";
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Dashboard, type DashboardData, type DashboardAsset, type SyncResult } from "../../tui/views/Dashboard.js";
@@ -10,17 +10,26 @@ import { resolveRegistry } from "../../registry/resolve.js";
 import { transform } from "../../transform/engine.js";
 import { checkDrift } from "../../registry/drift.js";
 import { writeFiles } from "../../io/write-files.js";
-import { resolveScope, globalRootDir } from "../../io/global-paths.js";
+import { globalManifestPath, globalRootDir, globalConfigDir, findProjectManifest } from "../../io/global-paths.js";
+import { computeIntegrity } from "../../registry/integrity.js";
+import { readLockfile, writeLockfile, upsertLockEntry } from "../../registry/lockfile.js";
 import type { StatusKind } from "../../tui/components/StatusBadge.js";
+import { listAssets, assetPath, type ToolSource } from "./import.js";
+import { renderClaudeAssetFrontmatter } from "../../scaffold/templates.js";
+import type { ImportTool, ImportCandidate } from "../../tui/components/ImportView.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-async function loadDashboardData(manifestPath: string): Promise<DashboardData> {
+async function loadScopeData(
+  manifestPath: string,
+  assetScope: "global" | "project",
+  rootDir: string,
+): Promise<Pick<DashboardData, "assets" | "sources" | "conflicts">> {
   const manifest = loadManifest(manifestPath);
   const loaders = buildSourceLoaders(manifestPath);
-
   const allLoaded = [];
   const sourceAssetCounts = new Map<string, number>();
+
   for (const loader of loaders) {
     const result = await loader.load();
     allLoaded.push(...result.assets);
@@ -31,7 +40,7 @@ async function loadDashboardData(manifestPath: string): Promise<DashboardData> {
 
   const registry = resolveRegistry(allLoaded, manifest);
   const { files: emittedFiles } = transform(registry, manifest);
-  const driftEntries = checkDrift(emittedFiles);
+  const driftEntries = checkDrift(emittedFiles, rootDir);
 
   const assets: DashboardAsset[] = registry.all().map((ra) => {
     const assetDrift = driftEntries.filter((d) => d.assetId === ra.asset.id);
@@ -54,6 +63,7 @@ async function loadDashboardData(manifestPath: string): Promise<DashboardData> {
       targets: ra.asset.targets,
       source: ra.sourceName,
       readOnly: ra.readOnly,
+      scope: assetScope,
     };
   });
 
@@ -61,18 +71,96 @@ async function loadDashboardData(manifestPath: string): Promise<DashboardData> {
     name: s.name,
     type: s.type,
     count: sourceAssetCounts.get(s.name) ?? 0,
+    scope: assetScope,
   }));
 
   return { assets, sources, conflicts: registry.conflicts };
 }
 
+async function syncScope(manifestPath: string, rootDir: string): Promise<SyncResult> {
+  const manifest = loadManifest(manifestPath);
+  const loaders = buildSourceLoaders(manifestPath);
+  const allLoaded = [];
+  for (const loader of loaders) {
+    const result = await loader.load();
+    allLoaded.push(...result.assets);
+  }
+  const registry = resolveRegistry(allLoaded, manifest);
+  const { files } = transform(registry, manifest);
+  return writeFiles(files, rootDir);
+}
+
+async function updateScope(manifestPath: string): Promise<{ updated: number; errors: string[] }> {
+  try {
+    const lockfile = readLockfile();
+    const ids = Object.keys(lockfile.assets);
+    if (ids.length === 0) return { updated: 0, errors: [] };
+
+    const loaders = buildSourceLoaders(manifestPath);
+    let changed = 0;
+    let updated = lockfile;
+
+    for (const id of ids) {
+      const old = lockfile.assets[id];
+      for (const loader of loaders) {
+        const result = await loader.load();
+        const match = result.assets.find((a) => a.asset.id === id);
+        if (!match) continue;
+        const newIntegrity = computeIntegrity(match.origin.dir);
+        const newVersion = match.asset.version;
+        if (newIntegrity !== old.integrity || newVersion !== old.version) {
+          updated = upsertLockEntry(updated, id, {
+            source: match.sourceName,
+            version: newVersion,
+            integrity: newIntegrity,
+          });
+          changed++;
+        }
+        break;
+      }
+    }
+
+    writeLockfile(updated);
+    return { updated: changed, errors: [] };
+  } catch (err) {
+    return { updated: 0, errors: [(err as Error).message] };
+  }
+}
+
+function mergeData(
+  globalData: Pick<DashboardData, "assets" | "sources" | "conflicts">,
+  projectData: Pick<DashboardData, "assets" | "sources" | "conflicts"> | null,
+  scope: DashboardData["scope"],
+): DashboardData {
+  return {
+    assets: [...(projectData?.assets ?? []), ...globalData.assets],
+    sources: [...(projectData?.sources ?? []), ...globalData.sources],
+    conflicts: [...(projectData?.conflicts ?? []), ...globalData.conflicts],
+    scope,
+  };
+}
+
 export async function dashboardAction(options: { global?: boolean; project?: boolean } = {}): Promise<void> {
-  const { path: manifestPath, scope } = resolveScope(options);
-  const rootDir = scope === "global" ? globalRootDir() : dirname(manifestPath);
+  const globalRoot = globalRootDir();
+  const globalPath = globalManifestPath();
+  const projectManifestFound = !options.global ? findProjectManifest() : undefined;
+  const isProject = !!projectManifestFound;
+  const projectRoot = isProject ? dirname(projectManifestFound!) : undefined;
+  const dataScope: DashboardData["scope"] = isProject ? "project+global" : "global";
 
   let data: DashboardData;
   try {
-    data = await loadDashboardData(manifestPath);
+    const [globalData, projectData] = await Promise.all([
+      loadScopeData(globalPath, "global", globalRoot).catch(() => ({
+        assets: [] as DashboardAsset[],
+        sources: [],
+        conflicts: [],
+      })),
+      isProject
+        ? loadScopeData(projectManifestFound!, "project", projectRoot!)
+        : Promise.resolve(null),
+    ]);
+    data = mergeData(globalData, projectData, dataScope);
   } catch (err) {
     console.error(chalk.red(`Dashboard: ${(err as Error).message}`));
     process.exitCode = 1;
@@ -80,23 +168,83 @@ export async function dashboardAction(options: { global?: boolean; project?: boo
   }
 
   const onSync = async (): Promise<SyncResult> => {
-    const manifest = loadManifest(manifestPath);
-    const loaders = buildSourceLoaders(manifestPath);
-    const allLoaded = [];
-    for (const loader of loaders) {
-      const result = await loader.load();
-      allLoaded.push(...result.assets);
+    const [globalResult, projectResult] = await Promise.all([
+      syncScope(globalPath, globalRoot),
+      isProject ? syncScope(projectManifestFound!, projectRoot!) : Promise.resolve(null),
+    ]);
+    return {
+      written: globalResult.written + (projectResult?.written ?? 0),
+      unchanged: globalResult.unchanged + (projectResult?.unchanged ?? 0),
+      errors: [...globalResult.errors, ...(projectResult?.errors ?? [])],
+    };
+  };
+
+  const onRefresh = async (): Promise<DashboardData> => {
+    const [globalData, projectData] = await Promise.all([
+      loadScopeData(globalPath, "global", globalRoot).catch(() => ({
+        assets: [] as DashboardAsset[],
+        sources: [],
+        conflicts: [],
+      })),
+      isProject
+        ? loadScopeData(projectManifestFound!, "project", projectRoot!)
+        : Promise.resolve(null),
+    ]);
+    return mergeData(globalData, projectData, dataScope);
+  };
+
+  const onUpdate = async (): Promise<{ updated: number; errors: string[] }> => {
+    const [globalResult, projectResult] = await Promise.all([
+      updateScope(globalPath),
+      isProject ? updateScope(projectManifestFound!) : Promise.resolve({ updated: 0, errors: [] }),
+    ]);
+    return {
+      updated: globalResult.updated + projectResult.updated,
+      errors: [...globalResult.errors, ...projectResult.errors],
+    };
+  };
+
+  const onListImportAssets = async (tool: ImportTool): Promise<ImportCandidate[]> => {
+    const assets = listAssets(tool as ToolSource);
+    return assets.map((a) => ({ id: a.id, kind: a.kind }));
+  };
+
+  const onImport = async (tool: ImportTool, ids: string[]): Promise<{ imported: number; errors: string[] }> => {
+    const assets = listAssets(tool as ToolSource);
+    const root = isProject && projectRoot ? projectRoot : globalConfigDir();
+    let imported = 0;
+    const errors: string[] = [];
+    for (const id of ids) {
+      const asset = assets.find((a) => a.id === id);
+      if (!asset) { errors.push(`${id}: not found`); continue; }
+      try {
+        const { dir, file } = assetPath(asset.kind, id, root);
+        const fullPath = join(dir, file);
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(fullPath, renderClaudeAssetFrontmatter({ id: asset.id, kind: asset.kind }) + asset.body);
+        imported++;
+      } catch (err) {
+        errors.push(`${id}: ${(err as Error).message}`);
+      }
     }
-    const registry = resolveRegistry(allLoaded, manifest);
-    const { files } = transform(registry, manifest);
-    return writeFiles(files, rootDir);
+    return { imported, errors };
   };
 
   const pkg = JSON.parse(
     readFileSync(join(__dirname, "..", "..", "..", "package.json"), "utf-8"),
   ) as { version: string };
 
-  const app = withFullScreen(<Dashboard version={pkg.version} data={data} onSync={onSync} />);
+  const app = withFullScreen(
+    <Dashboard
+      version={pkg.version}
+      data={data}
+      onSync={onSync}
+      onRefresh={onRefresh}
+      onUpdate={onUpdate}
+      onListImportAssets={onListImportAssets}
+      onImport={onImport}
+    />,
+  );
   app.start();
   await app.waitUntilExit();
 }

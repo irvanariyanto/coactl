@@ -5,17 +5,25 @@ import { Panel } from "../components/Panel.js";
 import { AssetList } from "../components/AssetList.js";
 import { StatusBadge } from "../components/StatusBadge.js";
 import { KeyHints } from "../components/KeyHints.js";
+import { DriftSummary } from "../components/DriftSummary.js";
 import { useKeyboardNav } from "../hooks/useKeyboardNav.js";
+import { ImportView, type ImportCandidate, type ImportTool } from "../components/ImportView.js";
 import { useTerminalSize } from "../hooks/useTerminalSize.js";
 import type { StatusKind } from "../components/StatusBadge.js";
 
-// Row budget for chrome that isn't the two scrollable panels, so the
-// dashboard's total height never exceeds the terminal and pushes the
-// header off-screen (Ink doesn't clip overflow by default).
 const HEADER_ROWS = 2;
 const KEY_HINTS_ROWS = 1;
-const PANEL_CHROME_ROWS = 3; // border-top + title + border-bottom
+const PANEL_CHROME_ROWS = 3;
 const MAX_SOURCES_ROWS = 4;
+const DRIFT_SUMMARY_ROWS = 1;
+
+const STATUS_PRIORITY: Record<StatusKind, number> = {
+  error: 0,
+  missing: 1,
+  drifted: 2,
+  unknown: 3,
+  synced: 4,
+};
 
 export interface DashboardAsset {
   id: string;
@@ -26,18 +34,21 @@ export interface DashboardAsset {
   targets: string[];
   source: string;
   readOnly: boolean;
+  scope: "global" | "project";
 }
 
 export interface DashboardSource {
   name: string;
   type: string;
   count: number;
+  scope: "global" | "project";
 }
 
 export interface DashboardData {
   assets: DashboardAsset[];
   sources: DashboardSource[];
   conflicts: Array<{ id: string; candidates: string[] }>;
+  scope: "project+global" | "global";
 }
 
 export interface SyncResult {
@@ -46,11 +57,17 @@ export interface SyncResult {
   errors: Array<{ path: string; error: string }>;
 }
 
-type SyncState =
+type ActionKind = "sync" | "update" | "refresh";
+
+type ActionState =
   | { status: "idle" }
-  | { status: "syncing" }
-  | { status: "done"; result: SyncResult }
-  | { status: "error"; message: string };
+  | { status: "running"; kind: ActionKind }
+  | { status: "sync-done"; written: number; unchanged: number; errors: SyncResult["errors"] }
+  | { status: "update-done"; updated: number; errors: string[] }
+  | { status: "refresh-done" }
+  | { status: "error"; kind: ActionKind; message: string };
+
+type ScopeFilter = "all" | "global" | "project";
 
 const PANEL_NAMES = ["assets", "details", "sources"] as const;
 
@@ -58,94 +75,158 @@ interface DashboardProps {
   version: string;
   data: DashboardData;
   onSync: () => Promise<SyncResult>;
+  onRefresh: () => Promise<DashboardData>;
+  onUpdate: () => Promise<{ updated: number; errors: string[] }>;
+  onListImportAssets: (tool: ImportTool) => Promise<ImportCandidate[]>;
+  onImport: (tool: ImportTool, ids: string[]) => Promise<{ imported: number; errors: string[] }>;
 }
 
-export function Dashboard({ version, data, onSync }: DashboardProps) {
+export function Dashboard({ version, data: initialData, onSync, onRefresh, onUpdate, onListImportAssets, onImport }: DashboardProps) {
   const { exit } = useApp();
   const { rows, columns } = useTerminalSize();
-  const [syncState, setSyncState] = useState<SyncState>({ status: "idle" });
+  const [liveData, setLiveData] = useState(initialData);
+  const [action, setAction] = useState<ActionState>({ status: "idle" });
+  const [filterOutOfSync, setFilterOutOfSync] = useState(false);
+  const [scopeFilter, setScopeFilter] = useState<ScopeFilter>("all");
+  const [importMode, setImportMode] = useState(false);
+
+  const isRunning = action.status === "running";
+
+  const displayAssets = [...liveData.assets]
+    .filter((a) => scopeFilter === "all" || a.scope === scopeFilter)
+    .sort((a, b) => STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status])
+    .filter((a) => !filterOutOfSync || a.status !== "synced");
+
+  const displaySources = liveData.sources.filter(
+    (s) => scopeFilter === "all" || s.scope === scopeFilter,
+  );
 
   const { activePanel, selectedIndices } = useKeyboardNav({
     panelCount: PANEL_NAMES.length,
-    itemCounts: [Math.max(data.assets.length, 1), 1, Math.max(data.sources.length, 1)],
+    itemCounts: [Math.max(displayAssets.length, 1), 1, Math.max(displaySources.length, 1)],
     onQuit: () => exit(),
+    enabled: !importMode,
   });
 
-  const selectedAsset = data.assets[selectedIndices[0] ?? 0];
+  const selectedAsset = displayAssets[selectedIndices[0] ?? 0];
 
   useInput((input) => {
-    if (input === "s" && syncState.status !== "syncing") {
-      setSyncState({ status: "syncing" });
+    if (importMode || isRunning) return;
+    if (input === "s") setAction({ status: "running", kind: "sync" });
+    if (input === "u") setAction({ status: "running", kind: "update" });
+    if (input === "r") setAction({ status: "running", kind: "refresh" });
+    if (input === "f") setFilterOutOfSync((prev) => !prev);
+    if (input === "i") setImportMode(true);
+    if (input === "g" && liveData.scope === "project+global") {
+      setScopeFilter((prev) =>
+        prev === "all" ? "global" : prev === "global" ? "project" : "all",
+      );
     }
   });
 
   useEffect(() => {
-    if (syncState.status !== "syncing") return;
-    onSync()
-      .then((result) => setSyncState({ status: "done", result }))
-      .catch((err: Error) => setSyncState({ status: "error", message: err.message }));
-  }, [syncState.status]);
+    if (action.status !== "running") return;
+    const { kind } = action;
 
-  const keyHints =
-    syncState.status === "syncing"
-      ? [{ key: "...", label: "syncing" }]
-      : [
-          { key: "Tab", label: "panel" },
-          { key: "j/k", label: "nav" },
-          { key: "s", label: "sync" },
-          { key: "q", label: "quit" },
-        ];
+    if (kind === "sync") {
+      onSync()
+        .then((r) => setAction({ status: "sync-done", written: r.written, unchanged: r.unchanged, errors: r.errors }))
+        .catch((err: Error) => setAction({ status: "error", kind, message: err.message }));
+    } else if (kind === "update") {
+      onUpdate()
+        .then((r) => setAction({ status: "update-done", updated: r.updated, errors: r.errors }))
+        .catch((err: Error) => setAction({ status: "error", kind, message: err.message }));
+    } else if (kind === "refresh") {
+      onRefresh()
+        .then((newData) => {
+          setLiveData(newData);
+          setAction({ status: "refresh-done" });
+        })
+        .catch((err: Error) => setAction({ status: "error", kind, message: err.message }));
+    }
+  }, [action.status]);
 
-  const conflictsRows = data.conflicts.length > 0 ? 1 : 0;
-  const syncStatusRows = syncState.status === "done" || syncState.status === "error" ? 1 : 0;
-  const sourcesContentRows = Math.max(1, Math.min(data.sources.length, MAX_SOURCES_ROWS));
+  const scopeLabel: ScopeFilter = scopeFilter;
+
+  const keyHints = isRunning
+    ? [{ key: "...", label: "working" }]
+    : [
+        { key: "Tab", label: "panel" },
+        { key: "j/k", label: "nav" },
+        { key: "s", label: "sync" },
+        { key: "u", label: "update" },
+        { key: "r", label: "refresh" },
+        { key: "i", label: "import" },
+        { key: "f", label: filterOutOfSync ? "show all" : "not-synced" },
+        ...(liveData.scope === "project+global"
+          ? [{ key: "g", label: `scope:${scopeLabel}` }]
+          : []),
+        { key: "q", label: "quit" },
+      ];
+
+  const conflictsRows = liveData.conflicts.length > 0 ? 1 : 0;
+  const actionStatusRows =
+    action.status !== "idle" && action.status !== "running" && action.status !== "refresh-done"
+      ? 1
+      : 0;
+  const sourcesContentRows = Math.max(1, Math.min(displaySources.length, MAX_SOURCES_ROWS));
   const sourcesPanelHeight = sourcesContentRows + PANEL_CHROME_ROWS;
-
-  const reservedRows = HEADER_ROWS + conflictsRows + sourcesPanelHeight + syncStatusRows + KEY_HINTS_ROWS;
+  const reservedRows =
+    HEADER_ROWS + DRIFT_SUMMARY_ROWS + conflictsRows + sourcesPanelHeight + actionStatusRows + KEY_HINTS_ROWS;
   const mainRowHeight = Math.max(rows - reservedRows, 5);
   const assetListMaxVisible = Math.max(mainRowHeight - PANEL_CHROME_ROWS, 1);
 
-  // Pin both side-by-side panels to explicit column counts. A "50%" width or
-  // bare flexGrow only *stretches* a panel to fill space — it doesn't clamp
-  // it, so a long unbreakable value (e.g. the Targets line) can still force
-  // the panel wider than its share and push its border past the terminal
-  // edge, wrapping the whole row at the raw-terminal level.
   const assetsPanelWidth = Math.max(Math.floor(columns / 2), 20);
   const detailsPanelWidth = Math.max(columns - assetsPanelWidth, 20);
-  // Pre-truncate detail values to an exact column budget instead of relying on
-  // Ink's wrap="truncate-end" inside a flex row — nested flex+text wrapping
-  // has its own edge cases (see panel width fix above) and a plain string
-  // truncation is simpler to reason about and pixel-exact.
-  const detailsContentWidth = detailsPanelWidth - 4; // border (2) + paddingX (2)
-  const truncateValue = (label: string, value: string): string => {
-    const budget = detailsContentWidth - label.length - 1; // -1 for the gap
+  const detailsContentWidth = detailsPanelWidth - 4;
+  const truncate = (label: string, value: string): string => {
+    const budget = detailsContentWidth - label.length - 1;
     if (budget <= 0) return "";
     if (value.length <= budget) return value;
     return budget === 1 ? "…" : `${value.slice(0, budget - 1)}…`;
   };
 
+  const assetsPanelTitle = filterOutOfSync
+    ? `Assets (${displayAssets.length}/${liveData.assets.length} not synced)`
+    : scopeFilter !== "all"
+    ? `Assets [${scopeFilter}] (${displayAssets.length})`
+    : `Assets (${displayAssets.length})`;
+
+  const headerSubtitle =
+    liveData.scope === "project+global" ? "project + global" : "global";
+
+  if (importMode) {
+    return (
+      <ImportView
+        onCancel={() => setImportMode(false)}
+        onListAssets={onListImportAssets}
+        onImport={onImport}
+        rows={rows}
+        columns={columns}
+      />
+    );
+  }
+
   return (
     <Box flexDirection="column" width="100%" height={rows} overflow="hidden">
-      <Header subtitle="Dashboard" version={version} />
+      <Header subtitle={`dashboard — ${headerSubtitle}`} version={version} />
 
-      {data.conflicts.length > 0 && (
+      {liveData.conflicts.length > 0 && (
         <Box paddingX={1}>
-          <Text color="yellow">⚠ {data.conflicts.length} conflict(s) resolved by precedence</Text>
+          <Text color="yellow">⚠ {liveData.conflicts.length} conflict(s) resolved by precedence</Text>
         </Box>
       )}
 
+      <DriftSummary assets={liveData.assets} filterActive={filterOutOfSync} />
+
       <Box flexGrow={1} width={columns} height={mainRowHeight} overflow="hidden">
-        <Panel
-          title={`Assets (${data.assets.length})`}
-          active={activePanel === 0}
-          width={assetsPanelWidth}
-          height={mainRowHeight}
-        >
+        <Panel title={assetsPanelTitle} active={activePanel === 0} width={assetsPanelWidth} height={mainRowHeight}>
           <AssetList
-            items={data.assets}
+            items={displayAssets}
             selectedIndex={selectedIndices[0] ?? 0}
             active={activePanel === 0}
             maxVisible={assetListMaxVisible}
+            showScope={liveData.scope === "project+global"}
           />
         </Panel>
 
@@ -154,23 +235,28 @@ export function Dashboard({ version, data, onSync }: DashboardProps) {
             <Box flexDirection="column" gap={0}>
               <Box gap={1}>
                 <Text dimColor>Kind:</Text>
-                <Text>{truncateValue("Kind:", selectedAsset.kind)}</Text>
+                <Text>{truncate("Kind:", selectedAsset.kind)}</Text>
               </Box>
               <Box gap={1}>
                 <Text dimColor>ID:</Text>
-                <Text bold>{truncateValue("ID:", selectedAsset.id)}</Text>
+                <Text bold>{truncate("ID:", selectedAsset.id)}</Text>
               </Box>
               <Box gap={1}>
                 <Text dimColor>Version:</Text>
-                <Text>{truncateValue("Version:", selectedAsset.version)}</Text>
+                <Text>{truncate("Version:", selectedAsset.version)}</Text>
               </Box>
+              {liveData.scope === "project+global" && (
+                <Box gap={1}>
+                  <Text dimColor>Scope:</Text>
+                  <Text color={selectedAsset.scope === "project" ? "cyan" : "magenta"}>
+                    {selectedAsset.scope}
+                  </Text>
+                </Box>
+              )}
               <Box gap={1}>
                 <Text dimColor>Source:</Text>
                 <Text>
-                  {truncateValue(
-                    "Source:",
-                    `${selectedAsset.source}${selectedAsset.readOnly ? " (read-only)" : ""}`,
-                  )}
+                  {truncate("Source:", `${selectedAsset.source}${selectedAsset.readOnly ? " (read-only)" : ""}`)}
                 </Text>
               </Box>
               <Box gap={1}>
@@ -179,11 +265,11 @@ export function Dashboard({ version, data, onSync }: DashboardProps) {
               </Box>
               <Box gap={1}>
                 <Text dimColor>Targets:</Text>
-                <Text>{truncateValue("Targets:", selectedAsset.targets.join(", ") || "none")}</Text>
+                <Text>{truncate("Targets:", selectedAsset.targets.join(", ") || "none")}</Text>
               </Box>
               {selectedAsset.description && (
                 <Box marginTop={1}>
-                  <Text dimColor>{truncateValue("", selectedAsset.description)}</Text>
+                  <Text dimColor>{truncate("", selectedAsset.description)}</Text>
                 </Box>
               )}
             </Box>
@@ -193,13 +279,20 @@ export function Dashboard({ version, data, onSync }: DashboardProps) {
         </Panel>
       </Box>
 
-      <Panel title="Sources" active={activePanel === 2} height={sourcesPanelHeight}>
+      <Panel
+        title={`Sources${scopeFilter !== "all" ? ` [${scopeFilter}]` : ""}`}
+        active={activePanel === 2}
+        height={sourcesPanelHeight}
+      >
         <Box flexDirection="column">
-          {data.sources.length === 0 ? (
+          {displaySources.length === 0 ? (
             <Text dimColor>No sources configured.</Text>
           ) : (
-            data.sources.map((src) => (
-              <Box key={src.name} gap={2}>
+            displaySources.map((src) => (
+              <Box key={`${src.scope}:${src.name}`} gap={2}>
+                <Text color={src.scope === "project" ? "cyan" : "magenta"} bold>
+                  {src.scope === "project" ? "P" : "G"}
+                </Text>
                 <Text color="cyan">{src.name}</Text>
                 <Text dimColor>[{src.type}]</Text>
                 <Text>
@@ -211,18 +304,31 @@ export function Dashboard({ version, data, onSync }: DashboardProps) {
         </Box>
       </Panel>
 
-      {syncState.status === "done" && (
+      {action.status === "sync-done" && (
         <Box paddingX={1}>
-          <Text color={syncState.result.errors.length > 0 ? "red" : "green"}>
-            {syncState.result.errors.length > 0
-              ? `✗ Sync failed: ${syncState.result.errors[0]?.error}`
-              : `✓ Synced — ${syncState.result.written} written, ${syncState.result.unchanged} unchanged`}
+          <Text color={action.errors.length > 0 ? "red" : "green"}>
+            {action.errors.length > 0
+              ? `✗ sync failed: ${action.errors[0]?.error}`
+              : `✓ synced — ${action.written} written, ${action.unchanged} unchanged`}
           </Text>
         </Box>
       )}
-      {syncState.status === "error" && (
+      {action.status === "update-done" && (
         <Box paddingX={1}>
-          <Text color="red">✗ Sync error: {syncState.message}</Text>
+          <Text color={action.errors.length > 0 ? "red" : "green"}>
+            {action.errors.length > 0
+              ? `✗ update failed: ${action.errors[0]}`
+              : action.updated === 0
+              ? `✓ all entries up to date`
+              : `✓ updated ${action.updated} entry/entries`}
+          </Text>
+        </Box>
+      )}
+      {action.status === "error" && (
+        <Box paddingX={1}>
+          <Text color="red">
+            ✗ {action.kind} error: {action.message}
+          </Text>
         </Box>
       )}
 

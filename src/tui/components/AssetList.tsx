@@ -5,15 +5,15 @@ export interface AssetItem {
   id: string;
   kind: string;
   status: StatusKind;
+  scope?: "global" | "project";
 }
 
 interface AssetListProps {
   items: AssetItem[];
   selectedIndex: number;
   active: boolean;
-  // Max rows available to render into. When the list is longer, it scrolls
-  // to keep the selected item in view instead of overflowing the panel.
   maxVisible?: number;
+  showScope?: boolean;
 }
 
 // Plain single-width glyphs only — emoji (⚡📏🔄) measure as double-width in
@@ -50,7 +50,7 @@ function computeWindow(total: number, selected: number, limit: number) {
   return { start, end, showAbove, showBelow };
 }
 
-export function AssetList({ items, selectedIndex, active, maxVisible }: AssetListProps) {
+export function AssetList({ items, selectedIndex, active, maxVisible, showScope }: AssetListProps) {
   if (items.length === 0) {
     return <Text dimColor>No assets found. Run `coactl add` to create one.</Text>;
   }
@@ -66,14 +66,24 @@ export function AssetList({ items, selectedIndex, active, maxVisible }: AssetLis
         const realIndex = start + i;
         const isSelected = active && realIndex === selectedIndex;
         const icon = KIND_ICONS[item.kind] ?? "·";
+        const idColor = isSelected ? "cyan"
+          : item.status === "error" ? "red"
+          : item.status === "drifted" ? "yellow"
+          : item.status === "missing" ? "gray"
+          : undefined;
         return (
           <Box key={item.id} gap={1}>
             <Text color={isSelected ? "cyan" : undefined}>{isSelected ? "❯" : " "}</Text>
             <Text>{icon}</Text>
-            <Text bold={isSelected} color={isSelected ? "cyan" : undefined} wrap="truncate-end">
+            <Text bold={isSelected} color={idColor} wrap="truncate-end">
               {item.id}
             </Text>
             <StatusBadge status={item.status} />
+            {showScope && item.scope && (
+              <Text color={item.scope === "project" ? "cyan" : "magenta"} dimColor={!isSelected}>
+                {item.scope === "project" ? "P" : "G"}
+              </Text>
+            )}
           </Box>
         );
       })}

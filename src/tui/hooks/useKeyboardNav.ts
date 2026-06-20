@@ -6,6 +6,7 @@ interface UseKeyboardNavOptions {
   itemCounts: number[];
   onQuit: () => void;
   onSelect?: (panelIndex: number, itemIndex: number) => void;
+  enabled?: boolean;
 }
 
 interface KeyboardNavState {
@@ -13,11 +14,12 @@ interface KeyboardNavState {
   selectedIndices: number[];
 }
 
-export function useKeyboardNav({ panelCount, itemCounts, onQuit, onSelect }: UseKeyboardNavOptions): KeyboardNavState {
+export function useKeyboardNav({ panelCount, itemCounts, onQuit, onSelect, enabled = true }: UseKeyboardNavOptions): KeyboardNavState {
   const [activePanel, setActivePanel] = useState(0);
   const [selectedIndices, setSelectedIndices] = useState<number[]>(() => new Array(panelCount).fill(0) as number[]);
 
   useInput((input, key) => {
+    if (!enabled) return;
     if (input === "q") {
       onQuit();
       return;
