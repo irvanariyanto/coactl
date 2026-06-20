@@ -33,6 +33,6 @@ export class CopilotAdapter implements Adapter {
     const fenceEnd = `<!-- END coactl:${id} -->`;
     const contents = `${fenceStart}\n${header}${scopeNote}${bodyText}\n${fenceEnd}`;
 
-    return [{ path: ".github/copilot-instructions.md", contents, assetId: id }];
+    return [{ path: ".github/copilot-instructions.md", contents, assetId: id, target: this.target }];
   }
 }

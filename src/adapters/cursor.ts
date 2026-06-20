@@ -31,20 +31,20 @@ export class CursorAdapter implements Adapter {
       case "rule": {
         const frontMatter = `---\ndescription: ${description}\nglobs:\n${globsYaml}\nalwaysApply: ${alwaysApply}\n---\n\n`;
         const contents = frontMatter + header + bodyText;
-        return [{ path: `.cursor/rules/${id}.mdc`, contents, assetId: id }];
+        return [{ path: `.cursor/rules/${id}.mdc`, contents, assetId: id, target: this.target }];
       }
       case "skill": {
         // Degraded: emit as scoped rule
         const frontMatter = `---\ndescription: "${description} (skill, scoped)"\nglobs:\n${globsYaml}\nalwaysApply: false\n---\n\n`;
         const contents = frontMatter + header + bodyText;
-        return [{ path: `.cursor/rules/${id}.mdc`, contents, assetId: id }];
+        return [{ path: `.cursor/rules/${id}.mdc`, contents, assetId: id, target: this.target }];
       }
       case "command": {
         // Degraded: emit as manual rule with invocation hint
         const invocation = asset.asset.invocation ?? `/${id}`;
         const frontMatter = `---\ndescription: "${description} (command: ${invocation})"\nglobs:\n${globsYaml}\nalwaysApply: false\n---\n\n`;
         const contents = frontMatter + header + bodyText;
-        return [{ path: `.cursor/rules/${id}.mdc`, contents, assetId: id }];
+        return [{ path: `.cursor/rules/${id}.mdc`, contents, assetId: id, target: this.target }];
       }
       case "workflow": {
         // Skip: emit nothing

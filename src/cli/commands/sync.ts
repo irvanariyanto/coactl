@@ -8,18 +8,70 @@ import { loadManifest } from "../../schema/load.js";
 import { writeFiles } from "../../io/write-files.js";
 import { globalRootDir, resolveScope } from "../../io/global-paths.js";
 import { createSpinner, printHeader } from "../../ui/output.js";
-import type { AssetKind, Target } from "../../schema/index.js";
+import { SUPPORTED_TARGETS, type AssetKind, type Target } from "../../schema/index.js";
 
-export async function syncAction(options: { global?: boolean; project?: boolean; kind?: string; target?: string }): Promise<void> {
+const TARGET_HINTS: Record<Target, string> = {
+  "claude-code": ".claude/  (skills, commands, rules)",
+  "cursor": ".cursor/rules/  (.mdc files)",
+  "windsurf": ".windsurfrules  (managed blocks)",
+  "copilot": ".github/copilot-instructions.md  (managed blocks)",
+};
+
+export async function syncAction(options: {
+  global?: boolean;
+  project?: boolean;
+  kind?: string;
+  target?: string;
+}): Promise<void> {
   printHeader("sync");
 
   const { path: manifestPath, scope } = resolveScope(options);
-  // rootDir must track the resolved scope (not just the raw --global flag) so an
-  // auto-detected project manifest writes next to itself, and an auto-fallback to
-  // global writes under the home dir — never a mismatched mix of the two.
   const rootDir = scope === "global" ? globalRootDir() : dirname(dirname(resolve(manifestPath)));
-  if (scope === "global") {
+
+  if (scope === "global" && !options.global) {
+    if (process.stdout.isTTY) {
+      const confirmed = await p.confirm({
+        message: `No project manifest found. Sync to global scope (${globalRootDir()}) instead?`,
+        initialValue: false,
+      });
+      if (p.isCancel(confirmed) || !confirmed) {
+        p.cancel('Run "coactl init" to create a project manifest first.');
+        return;
+      }
+    } else {
+      p.log.error(`No project manifest found. Run "coactl init" to create one, or use --global to sync globally.`);
+      process.exitCode = 1;
+      return;
+    }
+  } else if (scope === "global") {
     p.log.message(`Syncing to global paths (${globalRootDir()})`);
+  } else {
+    p.log.message(`Syncing project at ${rootDir}`);
+  }
+
+  let selectedTargets: Target[] | undefined;
+
+  if (!options.target && process.stdout.isTTY) {
+    const picked = await p.multiselect<Target>({
+      message: "Sync to which targets?",
+      options: SUPPORTED_TARGETS.map((t) => ({
+        value: t,
+        label: t,
+        hint: TARGET_HINTS[t],
+      })),
+      initialValues: [...SUPPORTED_TARGETS],
+    });
+    if (p.isCancel(picked)) {
+      p.cancel("Cancelled.");
+      return;
+    }
+    selectedTargets = picked as Target[];
+    if (selectedTargets.length === 0) {
+      p.log.warn("No targets selected.");
+      return;
+    }
+  } else if (options.target) {
+    selectedTargets = [options.target as Target];
   }
 
   const spinner = createSpinner("Loading manifest and sources...").start();
@@ -41,7 +93,7 @@ export async function syncAction(options: { global?: boolean; project?: boolean;
 
     const registry = resolveRegistry(allLoaded, manifest);
     const result = transform(registry, manifest, {
-      targets: options.target ? ([options.target as Target] as const) : undefined,
+      targets: selectedTargets,
       kinds: options.kind ? ([options.kind as AssetKind] as const) : undefined,
     });
 
@@ -52,9 +104,24 @@ export async function syncAction(options: { global?: boolean; project?: boolean;
       return;
     }
 
-    const writSpinner = createSpinner(`Writing ${result.files.length} file(s)...`).start();
+    const writeSpinner = createSpinner(`Writing ${result.files.length} file(s)...`).start();
     const summary = writeFiles(result.files, rootDir);
-    writSpinner.stop();
+    writeSpinner.stop();
+
+    // Group output by target
+    const byTarget = new Map<string, typeof result.files>();
+    for (const file of result.files) {
+      const group = byTarget.get(file.target) ?? [];
+      group.push(file);
+      byTarget.set(file.target, group);
+    }
+    for (const [target, files] of byTarget) {
+      console.log(`\n  ${chalk.bold(target)}  ${chalk.dim(`${files.length} file(s)`)}`);
+      for (const file of files) {
+        console.log(`    ${chalk.green("✓")} ${chalk.dim(file.assetId.padEnd(24))} ${chalk.cyan(file.path)}`);
+      }
+    }
+    console.log();
 
     if (summary.written > 0) {
       p.log.success(`${chalk.green(summary.written)} file(s) written`);

@@ -35,6 +35,6 @@ export class WindsurfAdapter implements Adapter {
     const fenceEnd = `<!-- END coactl:${id} -->`;
     const contents = `${fenceStart}\n${header}${bodyText}\n${fenceEnd}`;
 
-    return [{ path: ".windsurfrules", contents, assetId: id }];
+    return [{ path: ".windsurfrules", contents, assetId: id, target: this.target }];
   }
 }

@@ -7,6 +7,7 @@ export interface EmittedFile {
   path: string;
   contents: string;
   assetId: string;
+  target: Target;
 }
 
 export interface Adapter {

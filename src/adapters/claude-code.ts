@@ -34,12 +34,12 @@ export class ClaudeCodeAdapter implements Adapter {
 
     switch (asset.asset.kind) {
       case "skill":
-        return [{ path: `.claude/skills/${id}/SKILL.md`, contents, assetId: id }];
+        return [{ path: `.claude/skills/${id}/SKILL.md`, contents, assetId: id, target: this.target }];
       case "command":
       case "workflow":
-        return [{ path: `.claude/commands/${id}.md`, contents, assetId: id }];
+        return [{ path: `.claude/commands/${id}.md`, contents, assetId: id, target: this.target }];
       case "rule":
-        return [{ path: `.claude/rules/${id}.md`, contents, assetId: id }];
+        return [{ path: `.claude/rules/${id}.md`, contents, assetId: id, target: this.target }];
     }
   }
 }
