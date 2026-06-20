@@ -11,6 +11,8 @@ import { statusAction } from "./status.js";
 import { whyAction } from "./why.js";
 import { explainAction } from "./explain.js";
 
+import { importAction } from "./import.js";
+
 export interface CommandSpec {
   name: string;
   description: string;
@@ -18,6 +20,18 @@ export interface CommandSpec {
 }
 
 export const commandSpecs: CommandSpec[] = [
+  {
+    name: "import",
+    description: "Import existing Claude Code skills into coactl",
+    configure: (cmd) => {
+      cmd
+        .argument("[id]", "skill id to import")
+        .option("--all", "import all skills")
+        .option("--global", "import from/to global scope (~/.claude/skills → ~/.config/coactl/assets)")
+        .option("--force", "overwrite existing assets")
+        .action(importAction);
+    },
+  },
   {
     name: "init",
     description: "Initialize a new coactl project (creates agent.manifest.yaml)",
