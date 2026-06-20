@@ -1,4 +1,4 @@
-import { render } from "ink";
+import { withFullScreen } from "fullscreen-ink";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +11,7 @@ export async function dashboardAction(): Promise<void> {
     version: string;
   };
 
-  const { waitUntilExit } = render(<Dashboard version={pkg.version} />);
-  await waitUntilExit();
+  const app = withFullScreen(<Dashboard version={pkg.version} />);
+  app.start();
+  await app.waitUntilExit();
 }
