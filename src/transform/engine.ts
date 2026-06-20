@@ -2,6 +2,7 @@ import type { Adapter } from "../adapters/types.js";
 import { ClaudeCodeAdapter } from "../adapters/claude-code.js";
 import { CursorAdapter } from "../adapters/cursor.js";
 import { WindsurfAdapter } from "../adapters/windsurf.js";
+import { CopilotAdapter } from "../adapters/copilot.js";
 import { capabilityFor } from "../adapters/capability-matrix.js";
 import { degradedWarning, skipNotice, type Diagnostic } from "./diagnostics.js";
 import type { Registry } from "../registry/types.js";
@@ -29,8 +30,7 @@ function getAdapter(target: Target): Adapter {
     case "windsurf":
       return new WindsurfAdapter();
     case "copilot":
-      // TODO(AC-020): implement Copilot adapter
-      throw new Error("Copilot adapter not yet implemented (see AC-020)");
+      return new CopilotAdapter();
   }
 }
 
