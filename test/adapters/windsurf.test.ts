@@ -7,9 +7,10 @@ import { join } from "node:path";
 const FIXTURE_RULE_DIR = join(process.cwd(), "test/fixtures/workspace/assets/rule-alpha");
 
 function makeResolved(assetDir: string): ResolvedAsset {
-  const { asset } = loadAsset(assetDir);
+  const { asset, bodyText } = loadAsset(assetDir);
   return {
     asset,
+    bodyText,
     sourceName: "test-source",
     readOnly: false,
     origin: { dir: assetDir },
@@ -42,10 +43,8 @@ describe("WindsurfAdapter", () => {
 
   it("command and workflow return empty (skip)", () => {
     const resolved = makeResolved(FIXTURE_RULE_DIR);
-    resolved.asset.kind = "command";
-    expect(adapter.emit(resolved)).toHaveLength(0);
-    resolved.asset.kind = "workflow";
-    expect(adapter.emit(resolved)).toHaveLength(0);
+    expect(adapter.emit({ ...resolved, asset: { ...resolved.asset, kind: "command" } })).toHaveLength(0);
+    expect(adapter.emit({ ...resolved, asset: { ...resolved.asset, kind: "workflow" } })).toHaveLength(0);
   });
 
   it("output is idempotent", () => {

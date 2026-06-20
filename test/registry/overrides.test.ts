@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 import { applyOverrides } from "../../src/registry/overrides.js";
 import type { ResolvedAsset } from "../../src/registry/types.js";
 import type { Manifest } from "../../src/schema/index.js";
+import { join } from "node:path";
 
-function makeResolved(overrides?: Record<string, unknown>): { resolved: ResolvedAsset; manifest: Manifest } {
+function makeResolved(
+  overrides?: Record<string, unknown>,
+  originDir = "/assets/test-rule",
+): { resolved: ResolvedAsset; manifest: Manifest } {
   const resolved: ResolvedAsset = {
     asset: {
       id: "test-rule",
@@ -13,12 +17,12 @@ function makeResolved(overrides?: Record<string, unknown>): { resolved: Resolved
       description: "desc",
       activation: "auto",
       targets: ["claude-code", "cursor"],
-      body: "body.md",
       scope: { languages: ["ts"], paths: ["src/**"] },
     },
+    bodyText: "original body",
     sourceName: "external",
     readOnly: true,
-    origin: { dir: "/assets/test-rule" },
+    origin: { dir: originDir },
     provenance: { winningSource: "external", candidates: [{ sourceName: "external", readOnly: true }] },
   };
   const manifest: Manifest = {
@@ -49,11 +53,12 @@ describe("applyOverrides", () => {
     expect(result.asset.scope?.languages).toEqual(["ts"]);
   });
 
-  it("replaces body path when patch is set", () => {
-    const { resolved, manifest } = makeResolved({ "test-rule": { patch: "patches/test-rule.md" } });
+  it("replaces bodyText when patch is set", () => {
+    const fixturesDir = join(process.cwd(), "test/fixtures");
+    const { resolved, manifest } = makeResolved({ "test-rule": { patch: "patches/test-rule.md" } }, fixturesDir);
     const result = applyOverrides(resolved, manifest);
-    expect(result.asset.body).toBe("patches/test-rule.md");
-    expect(resolved.asset.body).toBe("body.md");
+    expect(result.bodyText).toContain("Patched rule content");
+    expect(resolved.bodyText).toBe("original body");
   });
 
   it("does not mutate the original source asset", () => {

@@ -1,36 +1,67 @@
 import { existsSync, readdirSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { loadAsset } from "../schema/load.js";
+import { basename, join, resolve } from "node:path";
+import { loadClaudeFormat } from "../schema/load.js";
 import type { LoadResult, SourceLoader } from "./types.js";
 
 export class LocalSource implements SourceLoader {
   constructor(
     private readonly sourceName: string,
-    private readonly sourcePath: string,
+    private readonly rootDir: string,
   ) {}
 
   async load(): Promise<LoadResult> {
-    const baseDir = resolve(this.sourcePath);
+    const root = resolve(this.rootDir);
     const assets: LoadResult["assets"] = [];
     const errors: LoadResult["errors"] = [];
 
-    let entries: import("node:fs").Dirent[];
-    try {
-      entries = readdirSync(baseDir, { withFileTypes: true });
-    } catch {
-      return { assets: [], errors: [{ dir: baseDir, error: new Error(`Cannot read source path: ${baseDir}`) }] };
+    // Skills: .claude/skills/{id}/SKILL.md
+    const skillsDir = join(root, ".claude", "skills");
+    if (existsSync(skillsDir)) {
+      for (const entry of readdirSync(skillsDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const skillFile = join(skillsDir, entry.name, "SKILL.md");
+        if (!existsSync(skillFile)) continue;
+        try {
+          const result = loadClaudeFormat(skillFile, entry.name, "skill");
+          if (!result) continue;
+          assets.push({ asset: result.asset, sourceName: this.sourceName, origin: { dir: join(skillsDir, entry.name) }, readOnly: false, bodyText: result.bodyText });
+        } catch (err) {
+          errors.push({ dir: join(skillsDir, entry.name), error: err as Error });
+        }
+      }
     }
 
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const dir = join(baseDir, entry.name);
-      if (!existsSync(join(dir, "asset.yaml"))) continue;
+    // Commands + Workflows: .claude/commands/{id}.md
+    const commandsDir = join(root, ".claude", "commands");
+    if (existsSync(commandsDir)) {
+      for (const entry of readdirSync(commandsDir, { withFileTypes: true })) {
+        if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+        const id = basename(entry.name, ".md");
+        const filePath = join(commandsDir, entry.name);
+        try {
+          const result = loadClaudeFormat(filePath, id, "command");
+          if (!result) continue;
+          assets.push({ asset: result.asset, sourceName: this.sourceName, origin: { dir: commandsDir }, readOnly: false, bodyText: result.bodyText });
+        } catch (err) {
+          errors.push({ dir: filePath, error: err as Error });
+        }
+      }
+    }
 
-      try {
-        const { asset } = loadAsset(dir);
-        assets.push({ asset, sourceName: this.sourceName, origin: { dir }, readOnly: false });
-      } catch (err) {
-        errors.push({ dir, error: err as Error });
+    // Rules: .claude/rules/{id}.md
+    const rulesDir = join(root, ".claude", "rules");
+    if (existsSync(rulesDir)) {
+      for (const entry of readdirSync(rulesDir, { withFileTypes: true })) {
+        if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+        const id = basename(entry.name, ".md");
+        const filePath = join(rulesDir, entry.name);
+        try {
+          const result = loadClaudeFormat(filePath, id, "rule");
+          if (!result) continue;
+          assets.push({ asset: result.asset, sourceName: this.sourceName, origin: { dir: rulesDir }, readOnly: false, bodyText: result.bodyText });
+        } catch (err) {
+          errors.push({ dir: filePath, error: err as Error });
+        }
       }
     }
 

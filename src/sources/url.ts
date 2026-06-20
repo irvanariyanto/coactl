@@ -57,8 +57,8 @@ async function loadAssetsFromDir(sourceName: string, dir: string): Promise<LoadR
     const assetDir = join(dir, entry.name);
     if (!existsSync(join(assetDir, "asset.yaml"))) continue;
     try {
-      const { asset } = loadAsset(assetDir);
-      assets.push({ asset, sourceName, origin: { dir: assetDir }, readOnly: true });
+      const { asset, bodyText } = loadAsset(assetDir);
+      assets.push({ asset, sourceName, origin: { dir: assetDir }, readOnly: true, bodyText });
     } catch (err) {
       errors.push({ dir: assetDir, error: err as Error });
     }

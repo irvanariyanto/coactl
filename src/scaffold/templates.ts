@@ -9,60 +9,84 @@ function toTitleCase(id: string): string {
   return id.split("-").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
 }
 
-export function renderAssetYaml({ id, kind }: ScaffoldOptions): string {
+export function renderClaudeAssetFrontmatter({ id, kind }: ScaffoldOptions): string {
   const name = toTitleCase(id);
-  const lines: string[] = [
-    `id: ${id}`,
-    `kind: ${kind}`,
-    `name: ${name}`,
-    `version: 0.1.0`,
-    `description: "Describe what ${name} does."`,
-  ];
 
   switch (kind) {
     case "skill":
-      lines.push(`activation: agent-requested`);
-      lines.push(`triggers:`);
-      lines.push(`  - type: glob`);
-      lines.push(`    pattern: "**/*.ts"`);
-      lines.push(`targets:`);
-      lines.push(`  - claude-code`);
-      lines.push(`  - cursor`);
-      lines.push(`  - windsurf`);
-      lines.push(`  - copilot`);
-      break;
-    case "command":
-      lines.push(`activation: manual`);
-      lines.push(`invocation: /${id}`);
-      lines.push(`targets:`);
-      lines.push(`  - claude-code`);
-      lines.push(`  - cursor`);
-      break;
-    case "rule":
-      lines.push(`activation: auto`);
-      lines.push(`targets:`);
-      lines.push(`  - claude-code`);
-      lines.push(`  - cursor`);
-      lines.push(`  - windsurf`);
-      lines.push(`  - copilot`);
-      break;
-    case "workflow":
-      lines.push(`activation: manual`);
-      lines.push(`steps:`);
-      lines.push(`  - run: "skill:plan"`);
-      lines.push(`  - loop:`);
-      lines.push(`      until: done`);
-      lines.push(`      do:`);
-      lines.push(`        - run: "command:test"`);
-      lines.push(`targets:`);
-      lines.push(`  - claude-code`);
-      break;
-  }
+      return [
+        "---",
+        `name: ${name}`,
+        "version: 0.1.0",
+        `description: "Describe what ${name} does."`,
+        "activation: agent-requested",
+        "triggers:",
+        '  - type: glob',
+        '    pattern: "**/*.ts"',
+        "targets:",
+        "  - claude-code",
+        "  - cursor",
+        "  - windsurf",
+        "  - copilot",
+        "---",
+        "",
+      ].join("\n");
 
-  lines.push(`body: body.md`);
-  return lines.join("\n") + "\n";
+    case "command":
+      return [
+        "---",
+        `description: "Describe what ${name} does."`,
+        `invocation: /${id}`,
+        `name: ${name}`,
+        "version: 0.1.0",
+        "activation: manual",
+        "targets:",
+        "  - claude-code",
+        "  - cursor",
+        "---",
+        "",
+      ].join("\n");
+
+    case "rule":
+      return [
+        "---",
+        `name: ${name}`,
+        "version: 0.1.0",
+        `description: "Describe what ${name} does."`,
+        "activation: auto",
+        "targets:",
+        "  - claude-code",
+        "  - cursor",
+        "  - windsurf",
+        "  - copilot",
+        "---",
+        "",
+      ].join("\n");
+
+    case "workflow":
+      return [
+        "---",
+        `description: "Describe what ${name} does."`,
+        `invocation: /${id}`,
+        `name: ${name}`,
+        "version: 0.1.0",
+        "kind: workflow",
+        "activation: manual",
+        "steps:",
+        '  - run: "skill:plan"',
+        "  - loop:",
+        "      until: done",
+        "      do:",
+        '        - run: "command:test"',
+        "targets:",
+        "  - claude-code",
+        "---",
+        "",
+      ].join("\n");
+  }
 }
 
-export function renderBodyMd({ id, kind }: ScaffoldOptions): string {
-  return `# ${toTitleCase(id)}\n\nDescribe what this ${kind} does and how to use it.\n`;
+export function renderClaudeAssetMd(opts: ScaffoldOptions): string {
+  const body = `# ${toTitleCase(opts.id)}\n\nDescribe what this ${opts.kind} does and how to use it.\n`;
+  return renderClaudeAssetFrontmatter(opts) + body;
 }

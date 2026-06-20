@@ -46,8 +46,8 @@ export class PackageSource implements SourceLoader {
       const dir = join(assetsDir, entry.name);
       if (!existsSync(join(dir, "asset.yaml"))) continue;
       try {
-        const { asset } = loadAsset(dir);
-        assets.push({ asset, sourceName: this.sourceName, origin: { dir }, readOnly: true });
+        const { asset, bodyText } = loadAsset(dir);
+        assets.push({ asset, sourceName: this.sourceName, origin: { dir }, readOnly: true, bodyText });
       } catch (err) {
         errors.push({ dir, error: err as Error });
       }

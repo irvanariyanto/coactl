@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ClaudeCodeAdapter } from "../../src/adapters/claude-code.js";
 import { CursorAdapter } from "../../src/adapters/cursor.js";
-import { contentHash } from "../../src/transform/header.js";
 import { loadAsset } from "../../src/schema/load.js";
 import type { ResolvedAsset } from "../../src/registry/types.js";
 import { join } from "node:path";
@@ -10,9 +9,10 @@ const FIXTURE_SKILL_DIR = join(process.cwd(), "test/fixtures/workspace/assets/sk
 const FIXTURE_RULE_DIR = join(process.cwd(), "test/fixtures/workspace/assets/rule-alpha");
 
 function makeResolvedAsset(assetDir: string, sourceName = "test-source"): ResolvedAsset {
-  const { asset } = loadAsset(assetDir);
+  const { asset, bodyText } = loadAsset(assetDir);
   return {
     asset,
+    bodyText,
     sourceName,
     readOnly: false,
     origin: { dir: assetDir },
@@ -36,13 +36,10 @@ describe("ClaudeCodeAdapter", () => {
     }
   });
 
-  it("emits skill as .claude/skills/<id>/SKILL.md with drift header", () => {
+  it("emits nothing for skills (source files live in .claude/ already)", () => {
     const asset = makeResolvedAsset(FIXTURE_SKILL_DIR);
     const files = adapter.emit(asset);
-    expect(files).toHaveLength(1);
-    expect(files[0].path).toBe(`.claude/skills/${asset.asset.id}/SKILL.md`);
-    expect(files[0].contents).toContain("DO NOT EDIT");
-    expect(files[0].contents).toContain(asset.asset.id);
+    expect(files).toHaveLength(0);
   });
 
   it("emits rule as part of CLAUDE.md with managed fences", () => {
@@ -55,8 +52,8 @@ describe("ClaudeCodeAdapter", () => {
     expect(files[0].contents).toContain("DO NOT EDIT");
   });
 
-  it("emits are idempotent (same asset → same hash)", () => {
-    const asset = makeResolvedAsset(FIXTURE_SKILL_DIR);
+  it("emits are idempotent (same rule asset → same output)", () => {
+    const asset = makeResolvedAsset(FIXTURE_RULE_DIR);
     const files1 = adapter.emit(asset);
     const files2 = adapter.emit(asset);
     expect(files1[0].contents).toBe(files2[0].contents);

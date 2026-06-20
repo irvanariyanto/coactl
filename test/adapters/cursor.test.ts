@@ -7,9 +7,10 @@ import { join } from "node:path";
 const FIXTURE_RULE_DIR = join(process.cwd(), "test/fixtures/workspace/assets/rule-alpha");
 
 function makeResolvedAsset(assetDir: string, sourceName = "test-source"): ResolvedAsset {
-  const { asset } = loadAsset(assetDir);
+  const { asset, bodyText } = loadAsset(assetDir);
   return {
     asset,
+    bodyText,
     sourceName,
     readOnly: false,
     origin: { dir: assetDir },
@@ -47,9 +48,8 @@ describe("CursorAdapter", () => {
 
   it("workflow returns empty array (skip)", () => {
     const asset = makeResolvedAsset(FIXTURE_RULE_DIR);
-    asset.asset.kind = "workflow";
-    const files = adapter.emit(asset);
-    expect(files).toHaveLength(0);
+    const modified = { ...asset, asset: { ...asset.asset, kind: "workflow" as const } };
+    expect(adapter.emit(modified)).toHaveLength(0);
   });
 
   it("emits are idempotent", () => {

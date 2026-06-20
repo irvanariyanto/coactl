@@ -13,35 +13,24 @@ const MANIFEST: Manifest = {
   resolution: { precedence: ["test-source"] },
 };
 
+function makeLoaded(assetDir: string) {
+  const { asset, bodyText } = loadAsset(assetDir);
+  return { asset, bodyText, sourceName: "test-source", origin: { dir: assetDir }, readOnly: false };
+}
+
 describe("transform engine", () => {
   it("dispatches asset to each target and aggregates files", () => {
-    const { asset: skillAsset } = loadAsset(FIXTURE_SKILL_DIR);
-    const loaded = [
-      {
-        asset: skillAsset,
-        sourceName: "test-source",
-        origin: { dir: FIXTURE_SKILL_DIR },
-        readOnly: false,
-      },
-    ];
+    const loaded = [makeLoaded(FIXTURE_RULE_DIR)];
     const registry = resolveRegistry(loaded, MANIFEST);
     const result = transform(registry, MANIFEST);
 
     expect(result.files.length).toBeGreaterThan(0);
-    expect(result.files.some((f) => f.path.includes(".claude"))).toBe(true);
+    expect(result.files.some((f) => f.path === "CLAUDE.md")).toBe(true);
     expect(result.files.some((f) => f.path.includes(".cursor"))).toBe(true);
   });
 
   it("generates degraded warning for degraded capabilities", () => {
-    const { asset: skillAsset } = loadAsset(FIXTURE_SKILL_DIR);
-    const loaded = [
-      {
-        asset: skillAsset,
-        sourceName: "test-source",
-        origin: { dir: FIXTURE_SKILL_DIR },
-        readOnly: false,
-      },
-    ];
+    const loaded = [makeLoaded(FIXTURE_SKILL_DIR)];
     const registry = resolveRegistry(loaded, MANIFEST);
     const result = transform(registry, MANIFEST);
 
@@ -51,40 +40,18 @@ describe("transform engine", () => {
   });
 
   it("filters by kind option", () => {
-    const { asset: skillAsset } = loadAsset(FIXTURE_SKILL_DIR);
-    const { asset: ruleAsset } = loadAsset(FIXTURE_RULE_DIR);
-    const loaded = [
-      {
-        asset: skillAsset,
-        sourceName: "test-source",
-        origin: { dir: FIXTURE_SKILL_DIR },
-        readOnly: false,
-      },
-      {
-        asset: ruleAsset,
-        sourceName: "test-source",
-        origin: { dir: FIXTURE_RULE_DIR },
-        readOnly: false,
-      },
-    ];
-    const registry = resolveRegistry(loaded, MANIFEST);
+    const skillLoaded = makeLoaded(FIXTURE_SKILL_DIR);
+    const ruleLoaded = makeLoaded(FIXTURE_RULE_DIR);
+    const registry = resolveRegistry([skillLoaded, ruleLoaded], MANIFEST);
     const result = transform(registry, MANIFEST, { kinds: ["rule"] });
 
     const assetIds = result.files.map((f) => f.assetId);
-    expect(assetIds).toContain(ruleAsset.id);
-    expect(assetIds).not.toContain(skillAsset.id);
+    expect(assetIds).toContain(ruleLoaded.asset.id);
+    expect(assetIds).not.toContain(skillLoaded.asset.id);
   });
 
   it("filters by target option", () => {
-    const { asset: skillAsset } = loadAsset(FIXTURE_SKILL_DIR);
-    const loaded = [
-      {
-        asset: skillAsset,
-        sourceName: "test-source",
-        origin: { dir: FIXTURE_SKILL_DIR },
-        readOnly: false,
-      },
-    ];
+    const loaded = [makeLoaded(FIXTURE_RULE_DIR)];
     const registry = resolveRegistry(loaded, MANIFEST);
     const result = transform(registry, MANIFEST, { targets: ["claude-code"] });
 
@@ -92,35 +59,19 @@ describe("transform engine", () => {
   });
 
   it("returns files with correct assetId", () => {
-    const { asset: skillAsset } = loadAsset(FIXTURE_SKILL_DIR);
-    const loaded = [
-      {
-        asset: skillAsset,
-        sourceName: "test-source",
-        origin: { dir: FIXTURE_SKILL_DIR },
-        readOnly: false,
-      },
-    ];
+    const loaded = [makeLoaded(FIXTURE_RULE_DIR)];
     const registry = resolveRegistry(loaded, MANIFEST);
     const result = transform(registry, MANIFEST, { targets: ["claude-code"] });
 
-    expect(result.files.every((f) => f.assetId === skillAsset.id)).toBe(true);
+    expect(result.files.every((f) => f.assetId === loaded[0].asset.id)).toBe(true);
   });
 
   it("aggregates diagnostics from all assets and targets", () => {
-    const { asset: skillAsset } = loadAsset(FIXTURE_SKILL_DIR);
-    const loaded = [
-      {
-        asset: skillAsset,
-        sourceName: "test-source",
-        origin: { dir: FIXTURE_SKILL_DIR },
-        readOnly: false,
-      },
-    ];
+    const loaded = [makeLoaded(FIXTURE_SKILL_DIR)];
     const registry = resolveRegistry(loaded, MANIFEST);
     const result = transform(registry, MANIFEST);
 
     expect(result.diagnostics.length).toBeGreaterThan(0);
-    expect(result.diagnostics.every((d) => d.assetId === skillAsset.id)).toBe(true);
+    expect(result.diagnostics.every((d) => d.assetId === loaded[0].asset.id)).toBe(true);
   });
 });

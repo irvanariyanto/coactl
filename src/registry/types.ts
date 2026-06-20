@@ -11,6 +11,7 @@ export interface ResolvedAsset {
   readOnly: boolean;
   origin: { dir: string };
   provenance: Provenance;
+  bodyText: string;
 }
 
 export interface Registry {

@@ -1,11 +1,11 @@
 import * as p from "@clack/prompts";
 import chalk from "chalk";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { basename, join } from "node:path";
 import { homedir } from "node:os";
-import { renderAssetYaml } from "../../scaffold/templates.js";
+import { renderClaudeAssetFrontmatter } from "../../scaffold/templates.js";
 import { parseHeader } from "../../transform/header.js";
-import { globalAssetsDir } from "../../io/global-paths.js";
+import { globalRootDir } from "../../io/global-paths.js";
 import { BRAND } from "../../tui/theme.js";
 import type { AssetKind } from "../../schema/index.js";
 
@@ -87,16 +87,31 @@ function listAssets(tool: ToolSource, global?: boolean): ImportedAsset[] {
   return [{ id, kind: "rule" as AssetKind, body: content.trimStart() }];
 }
 
-function writeAsset(asset: ImportedAsset, assetsDir: string, force?: boolean): boolean {
-  const assetDir = join(assetsDir, asset.id);
-  if (existsSync(assetDir) && !force) {
+function claudeAssetPath(kind: AssetKind, id: string, root: string): { dir: string; file: string } {
+  switch (kind) {
+    case "skill":
+      return { dir: join(root, ".claude", "skills", id), file: "SKILL.md" };
+    case "command":
+    case "workflow":
+      return { dir: join(root, ".claude", "commands"), file: `${id}.md` };
+    case "rule":
+      return { dir: join(root, ".claude", "rules"), file: `${id}.md` };
+  }
+}
+
+function writeAsset(asset: ImportedAsset, root: string, force?: boolean): boolean {
+  const { dir, file } = claudeAssetPath(asset.kind, asset.id, root);
+  const fullPath = join(dir, file);
+
+  if (existsSync(fullPath) && !force) {
     p.log.warn(`"${asset.id}" already exists. Use --force to overwrite.`);
     return false;
   }
-  mkdirSync(assetDir, { recursive: true });
-  writeFileSync(join(assetDir, "asset.yaml"), renderAssetYaml({ id: asset.id, kind: asset.kind }));
-  writeFileSync(join(assetDir, "body.md"), asset.body);
-  p.log.success(`Imported ${chalk.bold(asset.id)} (${asset.kind}) → ${assetDir}`);
+
+  mkdirSync(dir, { recursive: true });
+  const frontmatter = renderClaudeAssetFrontmatter({ id: asset.id, kind: asset.kind });
+  writeFileSync(fullPath, frontmatter + asset.body);
+  p.log.success(`Imported ${chalk.bold(asset.id)} (${asset.kind}) → ${fullPath}`);
   return true;
 }
 
@@ -120,7 +135,7 @@ export async function importAction(
   }
 
   const path = sourcePath(tool, options.global);
-  const assetsDir = options.global ? globalAssetsDir() : resolve("assets");
+  const root = options.global ? globalRootDir() : process.cwd();
 
   if (options.all) {
     const assets = listAssets(tool, options.global);
@@ -130,9 +145,9 @@ export async function importAction(
     }
     let count = 0;
     for (const asset of assets) {
-      if (writeAsset(asset, assetsDir, options.force)) count++;
+      if (writeAsset(asset, root, options.force)) count++;
     }
-    p.outro(chalk.green(`Imported ${count}/${assets.length} asset(s). Run ${chalk.bold("coactl sync")} to generate native files.`));
+    p.outro(chalk.green(`Imported ${count}/${assets.length} asset(s). Run ${chalk.bold("coactl sync")} to generate files for other tools.`));
   } else {
     const assets = listAssets(tool, options.global);
     const asset = assets.find((a) => a.id === id);
@@ -141,9 +156,9 @@ export async function importAction(
       process.exitCode = 1;
       return;
     }
-    const ok = writeAsset(asset, assetsDir, options.force);
+    const ok = writeAsset(asset, root, options.force);
     if (ok) {
-      p.outro(chalk.green(`Done. Run ${chalk.bold("coactl sync")} to generate native files for other tools.`));
+      p.outro(chalk.green(`Done. Run ${chalk.bold("coactl sync")} to generate files for other tools.`));
     } else {
       process.exitCode = 1;
     }

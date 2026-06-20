@@ -5,6 +5,7 @@ export interface LoadedAsset {
   sourceName: string;
   origin: { dir: string };
   readOnly: boolean;
+  bodyText: string;
 }
 
 export interface LoadResult {

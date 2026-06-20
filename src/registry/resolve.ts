@@ -25,6 +25,7 @@ export function resolveRegistry(loadedAssets: LoadedAsset[], manifest: Manifest)
       sourceName: winner.sourceName,
       readOnly: winner.readOnly,
       origin: winner.origin,
+      bodyText: winner.bodyText,
       provenance: {
         winningSource: winner.sourceName,
         candidates: candidates.map((c) => ({ sourceName: c.sourceName, readOnly: c.readOnly })),

@@ -7,7 +7,7 @@ export const SUPPORTED_TARGETS = ["claude-code", "cursor", "windsurf", "copilot"
 export type Target = (typeof SUPPORTED_TARGETS)[number];
 
 const KEBAB_CASE_REGEX = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-const SEMVER_REGEX = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+export const SEMVER_REGEX = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 export const ScopeSchema = z.object({
   languages: z.array(z.string()).optional(),
@@ -47,10 +47,10 @@ export const AssetSchema = z
     steps: z.array(StepSchema).optional(),
     targets: z.array(z.enum(SUPPORTED_TARGETS)),
     priority: z.number().int().optional(),
-    body: z.string(),
+    body: z.string().optional(),
   })
   .superRefine((data, ctx) => {
-    if (data.invocation !== undefined && data.kind !== "command") {
+    if (data.invocation !== undefined && data.kind !== "command" && data.kind !== "workflow") {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["invocation"],

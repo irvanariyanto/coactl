@@ -1,15 +1,27 @@
 import * as p from "@clack/prompts";
 import chalk from "chalk";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { ASSET_KINDS } from "../../schema/index.js";
-import { loadAsset } from "../../schema/load.js";
-import { renderAssetYaml, renderBodyMd } from "../../scaffold/templates.js";
-import { globalAssetsDir } from "../../io/global-paths.js";
+import { loadClaudeFormat } from "../../schema/load.js";
+import { renderClaudeAssetMd } from "../../scaffold/templates.js";
+import { globalRootDir } from "../../io/global-paths.js";
 import { BRAND } from "../../tui/theme.js";
 import type { AssetKind } from "../../schema/index.js";
 
 const KEBAB_REGEX = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+function claudeAssetPath(kind: AssetKind, id: string, root: string): { dir: string; file: string } {
+  switch (kind) {
+    case "skill":
+      return { dir: join(root, ".claude", "skills", id), file: "SKILL.md" };
+    case "command":
+    case "workflow":
+      return { dir: join(root, ".claude", "commands"), file: `${id}.md` };
+    case "rule":
+      return { dir: join(root, ".claude", "rules"), file: `${id}.md` };
+  }
+}
 
 export async function addAction(id: string, options: { kind?: string; force?: boolean; global?: boolean }): Promise<void> {
   p.intro(chalk.bgCyan(chalk.black(` ${BRAND} add `)));
@@ -45,20 +57,22 @@ export async function addAction(id: string, options: { kind?: string; force?: bo
     return;
   }
 
-  const assetDir = options.global ? resolve(globalAssetsDir(), id) : resolve(process.cwd(), "assets", id);
+  const root = options.global ? globalRootDir() : process.cwd();
+  const { dir, file } = claudeAssetPath(kind as AssetKind, id, root);
+  const fullPath = join(dir, file);
 
-  if (existsSync(assetDir) && !options.force) {
-    p.log.error(`Asset "${id}" already exists at ${assetDir}. Use --force to overwrite.`);
+  if (existsSync(fullPath) && !options.force) {
+    p.log.error(`Asset "${id}" already exists at ${fullPath}. Use --force to overwrite.`);
     process.exitCode = 1;
     return;
   }
 
-  mkdirSync(assetDir, { recursive: true });
-  writeFileSync(join(assetDir, "asset.yaml"), renderAssetYaml({ id, kind: kind as AssetKind }));
-  writeFileSync(join(assetDir, "body.md"), renderBodyMd({ id, kind: kind as AssetKind }));
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(fullPath, renderClaudeAssetMd({ id, kind: kind as AssetKind }));
 
   try {
-    loadAsset(assetDir);
+    const result = loadClaudeFormat(fullPath, id, kind as AssetKind);
+    if (!result) throw new Error("File did not parse as a coactl asset (missing frontmatter or targets field)");
   } catch (err) {
     p.log.error(`Scaffolded asset failed validation (template drift):\n${(err as Error).message}`);
     process.exitCode = 1;
@@ -66,6 +80,6 @@ export async function addAction(id: string, options: { kind?: string; force?: bo
   }
 
   p.log.success(`Created ${chalk.cyan(kind)} asset: ${chalk.bold(id)}`);
-  p.log.info(`Path: ${assetDir}`);
+  p.log.info(`Path: ${fullPath}`);
   p.outro(chalk.green("Done."));
 }

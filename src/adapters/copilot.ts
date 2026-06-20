@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { contentHash, renderHeader } from "../transform/header.js";
 import { capabilityFor } from "./capability-matrix.js";
 import type { Adapter, EmittedFile } from "./types.js";
@@ -23,8 +21,7 @@ export class CopilotAdapter implements Adapter {
       return [];
     }
 
-    const bodyPath = join(asset.origin.dir, asset.asset.body);
-    const bodyText = readFileSync(bodyPath, "utf-8");
+    const bodyText = asset.bodyText;
     const hash = contentHash(bodyText);
     const header = renderHeader({ assetId: id, source: asset.sourceName, hash, commentSyntax: "<!-- -->" });
 

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { ResolvedAsset } from "./types.js";
 import type { Manifest, Scope } from "../schema/index.js";
 
@@ -17,7 +19,9 @@ export function applyOverrides(resolved: ResolvedAsset, manifest: Manifest): Res
   const asset = { ...resolved.asset };
   if (entry.targets) asset.targets = entry.targets as typeof asset.targets;
   if (entry.scope) asset.scope = deepMergeScope(resolved.asset.scope, entry.scope);
-  if (entry.patch) asset.body = entry.patch;
 
-  return { ...resolved, asset };
+  let bodyText = resolved.bodyText;
+  if (entry.patch) bodyText = readFileSync(resolve(resolved.origin.dir, entry.patch), "utf-8");
+
+  return { ...resolved, asset, bodyText };
 }
