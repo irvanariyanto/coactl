@@ -77,7 +77,7 @@ export const commandSpecs: CommandSpec[] = [
     name: "status",
     description: "Detect drift between generated files and the registry",
     configure: (cmd) => {
-      cmd.action(statusAction);
+      cmd.option("--json", "output as JSON").action(statusAction);
     },
   },
   {

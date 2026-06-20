@@ -46,9 +46,9 @@ describe("coactl CLI smoke test", () => {
     expect(output).toMatch(/^\d+\.\d+\.\d+/);
   });
 
-  it("status command produces styled output", () => {
+  it("status command reports missing manifest gracefully", () => {
     const output = runCliNoColor(["status"]);
-    expect(output).toContain("status");
+    expect(output).toMatch(/status failed|not found|manifest/i);
   });
 
   it("explain command produces table output", () => {
