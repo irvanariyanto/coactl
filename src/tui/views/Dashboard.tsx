@@ -77,8 +77,8 @@ export interface DashboardProps {
   onSync: () => Promise<SyncResult>;
   onRefresh: () => Promise<DashboardData>;
   onUpdate: () => Promise<{ updated: number; errors: string[] }>;
-  onListImportAssets: (tool: ImportTool) => Promise<ImportCandidate[]>;
-  onImport: (tool: ImportTool, ids: string[]) => Promise<{ imported: number; errors: string[] }>;
+  onListImportAssets: (tool: ImportTool, global: boolean) => Promise<ImportCandidate[]>;
+  onImport: (tool: ImportTool, ids: string[], global: boolean) => Promise<{ imported: number; errors: string[] }>;
   importGlobal: boolean;
 }
 
@@ -196,15 +196,22 @@ export function Dashboard({ version, data: initialData, onSync, onRefresh, onUpd
   const headerSubtitle =
     liveData.scope === "project+global" ? "project + global" : "global";
 
+  // The 'g' scope filter doubles as the import scope: explicitly switching to
+  // global/project also switches what import reads from and writes to, so you don't
+  // have to relaunch with --global just to import your existing global skills.
+  // "all" keeps the launch-time default (--global flag, or project if one was found).
+  const effectiveImportGlobal =
+    scopeFilter === "global" ? true : scopeFilter === "project" ? false : importGlobal;
+
   if (importMode) {
     return (
       <ImportView
         onCancel={() => setImportMode(false)}
-        onListAssets={onListImportAssets}
-        onImport={onImport}
+        onListAssets={(tool) => onListImportAssets(tool, effectiveImportGlobal)}
+        onImport={(tool, ids) => onImport(tool, ids, effectiveImportGlobal)}
         rows={rows}
         columns={columns}
-        global={importGlobal}
+        global={effectiveImportGlobal}
       />
     );
   }

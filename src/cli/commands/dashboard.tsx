@@ -206,18 +206,19 @@ export async function buildDashboardProps(options: { global?: boolean; project?:
     };
   };
 
-  // Mirrors the CLI's import command: project-relative (cwd) unless --global, independent
-  // of whether a .coactl manifest exists yet — importing is valid before `coactl init`.
+  // Default when the dashboard's scope filter is "all": mirrors the CLI's import command
+  // (project-relative unless --global). When the filter is set to "global" or "project",
+  // Dashboard passes that choice through explicitly instead — see effectiveImportGlobal.
   const importGlobal = !!options.global;
 
-  const onListImportAssets = async (tool: ImportTool): Promise<ImportCandidate[]> => {
-    const assets = listAssets(tool as ToolSource, importGlobal);
+  const onListImportAssets = async (tool: ImportTool, global: boolean): Promise<ImportCandidate[]> => {
+    const assets = listAssets(tool as ToolSource, global);
     return assets.map((a) => ({ id: a.id, kind: a.kind }));
   };
 
-  const onImport = async (tool: ImportTool, ids: string[]): Promise<{ imported: number; errors: string[] }> => {
-    const assets = listAssets(tool as ToolSource, importGlobal);
-    const root = importGlobal ? globalConfigDir() : join(process.cwd(), ".coactl");
+  const onImport = async (tool: ImportTool, ids: string[], global: boolean): Promise<{ imported: number; errors: string[] }> => {
+    const assets = listAssets(tool as ToolSource, global);
+    const root = global ? globalConfigDir() : join(process.cwd(), ".coactl");
     let imported = 0;
     const errors: string[] = [];
     for (const id of ids) {
