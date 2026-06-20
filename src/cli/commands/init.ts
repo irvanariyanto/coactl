@@ -18,35 +18,32 @@ export async function initAction(options: { force?: boolean }): Promise<void> {
     }
   }
 
-  const sourceName = await p.text({
-    message: "Local source name",
-    placeholder: "local",
-    defaultValue: "local",
-  });
-  if (p.isCancel(sourceName)) { p.cancel("Aborted."); return; }
+  const interactive = process.stdin.isTTY;
 
-  const assetsPath = await p.text({
-    message: "Assets directory path",
-    placeholder: "./assets",
-    defaultValue: "./assets",
-  });
-  if (p.isCancel(assetsPath)) { p.cancel("Aborted."); return; }
+  let sourceName = "local";
+  let assetsPath = "./assets";
 
-  const name = (sourceName as string) || "local";
-  const path = (assetsPath as string) || "./assets";
+  if (interactive) {
+    const nameInput = await p.text({ message: "Local source name", placeholder: "local", defaultValue: "local" });
+    if (p.isCancel(nameInput)) { p.cancel("Aborted."); return; }
+    const pathInput = await p.text({ message: "Assets directory path", placeholder: "./assets", defaultValue: "./assets" });
+    if (p.isCancel(pathInput)) { p.cancel("Aborted."); return; }
+    sourceName = (nameInput as string) || "local";
+    assetsPath = (pathInput as string) || "./assets";
+  }
 
   const manifest = {
-    sources: [{ name, type: "local", path }],
-    resolution: { precedence: [name] },
+    sources: [{ name: sourceName, type: "local", path: assetsPath }],
+    resolution: { precedence: [sourceName] },
   };
 
   writeFileSync(manifestPath, stringify(manifest), "utf-8");
   p.log.success(`Created ${chalk.cyan("agent.manifest.yaml")}`);
 
-  const absAssetsDir = resolve(path);
+  const absAssetsDir = resolve(assetsPath);
   if (!existsSync(absAssetsDir)) {
     mkdirSync(absAssetsDir, { recursive: true });
-    p.log.success(`Created ${chalk.cyan(path + "/")}`);
+    p.log.success(`Created ${chalk.cyan(assetsPath + "/")}`);
   }
 
   p.outro(chalk.green(`Project ready. Run ${chalk.bold("coactl add --kind rule my-first-rule")} to scaffold your first asset.`));
