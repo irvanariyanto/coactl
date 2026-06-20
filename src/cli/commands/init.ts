@@ -23,15 +23,12 @@ export async function initAction(options: { force?: boolean; global?: boolean })
 
   const interactive = process.stdin.isTTY;
 
-  let sourceName = "local";
+  const sourceName = "local";
   let assetsPath = ".";
 
   if (interactive) {
-    const nameInput = await p.text({ message: "Local source name", placeholder: "local", defaultValue: "local" });
-    if (p.isCancel(nameInput)) { p.cancel("Aborted."); return; }
-    const pathInput = await p.text({ message: "Assets directory path (relative to .coactl/)", placeholder: ".", defaultValue: "." });
+    const pathInput = await p.text({ message: "Assets directory (relative to .coactl/)", placeholder: ".", defaultValue: "." });
     if (p.isCancel(pathInput)) { p.cancel("Aborted."); return; }
-    sourceName = (nameInput as string) || "local";
     assetsPath = (pathInput as string) || ".";
   }
 
