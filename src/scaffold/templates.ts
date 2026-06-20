@@ -3,14 +3,18 @@ import type { AssetKind } from "../schema/index.js";
 export interface ScaffoldOptions {
   id: string;
   kind: AssetKind;
+  description?: string;
 }
 
 function toTitleCase(id: string): string {
   return id.split("-").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
 }
 
-export function renderClaudeAssetFrontmatter({ id, kind }: ScaffoldOptions): string {
+export function renderClaudeAssetFrontmatter({ id, kind, description }: ScaffoldOptions): string {
   const name = toTitleCase(id);
+  // JSON.stringify gives a YAML-safe double-quoted scalar (same escaping rules) — used so
+  // a real imported description with quotes/backslashes doesn't break the frontmatter.
+  const desc = JSON.stringify(description ?? `Describe what ${name} does.`);
 
   switch (kind) {
     case "skill":
@@ -18,7 +22,7 @@ export function renderClaudeAssetFrontmatter({ id, kind }: ScaffoldOptions): str
         "---",
         `name: ${name}`,
         "version: 0.1.0",
-        `description: "Describe what ${name} does."`,
+        `description: ${desc}`,
         "activation: agent-requested",
         "triggers:",
         '  - type: glob',
@@ -35,7 +39,7 @@ export function renderClaudeAssetFrontmatter({ id, kind }: ScaffoldOptions): str
     case "command":
       return [
         "---",
-        `description: "Describe what ${name} does."`,
+        `description: ${desc}`,
         `invocation: /${id}`,
         `name: ${name}`,
         "version: 0.1.0",
@@ -52,7 +56,7 @@ export function renderClaudeAssetFrontmatter({ id, kind }: ScaffoldOptions): str
         "---",
         `name: ${name}`,
         "version: 0.1.0",
-        `description: "Describe what ${name} does."`,
+        `description: ${desc}`,
         "activation: auto",
         "targets:",
         "  - claude-code",
@@ -66,7 +70,7 @@ export function renderClaudeAssetFrontmatter({ id, kind }: ScaffoldOptions): str
     case "workflow":
       return [
         "---",
-        `description: "Describe what ${name} does."`,
+        `description: ${desc}`,
         `invocation: /${id}`,
         `name: ${name}`,
         "version: 0.1.0",

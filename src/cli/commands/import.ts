@@ -15,12 +15,13 @@ export interface ImportedAsset {
   id: string;
   kind: AssetKind;
   body: string;
+  description?: string;
 }
 
 function sourcePath(tool: ToolSource, global?: boolean): string {
   const base = global ? homedir() : process.cwd();
   switch (tool) {
-    case "claude-code": return join(base, ".claude", "skills");
+    case "claude-code": return join(base, ".claude");
     case "cursor":      return join(base, ".cursor", "rules");
     case "windsurf":    return join(base, ".windsurfrules");
     case "copilot":     return join(base, ".github", "copilot-instructions.md");
@@ -28,7 +29,7 @@ function sourcePath(tool: ToolSource, global?: boolean): string {
 }
 
 const SOURCE_REL: Record<ToolSource, string> = {
-  "claude-code": ".claude/skills/",
+  "claude-code": ".claude/{skills,commands,rules}/",
   "cursor": ".cursor/rules/",
   "windsurf": ".windsurfrules",
   "copilot": ".github/copilot-instructions.md",
@@ -53,6 +54,20 @@ function kindFromCursorFrontmatter(content: string): AssetKind {
   return m?.[1] === "true" ? "rule" : "skill";
 }
 
+// Reads the description out of a YAML frontmatter block so importing a real skill/rule
+// preserves its original description instead of falling back to a placeholder.
+function extractDescription(content: string): string | undefined {
+  const frontmatter = content.match(/^---\n([\s\S]*?)\n---\n/);
+  if (!frontmatter) return undefined;
+  const m = frontmatter[1].match(/^description:\s*(.+)$/m);
+  if (!m) return undefined;
+  return m[1].trim().replace(/^["']|["']$/g, "");
+}
+
+function isWorkflowFrontmatter(content: string): boolean {
+  return /^kind:\s*workflow\s*$/m.test(content);
+}
+
 function extractCoactlBlocks(content: string): Array<{ id: string; body: string }> {
   const blocks: Array<{ id: string; body: string }> = [];
   const re = /<!-- BEGIN coactl:([^\s>]+) -->([\s\S]*?)<!-- END coactl:\1 -->/g;
@@ -67,19 +82,47 @@ export function listAssets(tool: ToolSource, global?: boolean): ImportedAsset[] 
   const path = sourcePath(tool, global);
 
   if (tool === "claude-code") {
-    if (!existsSync(path)) return [];
-    // statSync (not Dirent.isDirectory) so symlinked skill dirs — e.g. plugin-installed
-    // skills — are detected; Dirent.isDirectory() ignores what a symlink points to.
-    // existsSync first since a dangling symlink would otherwise throw in statSync.
-    return readdirSync(path)
-      .filter((name) => existsSync(join(path, name)) && statSync(join(path, name)).isDirectory() && existsSync(join(path, name, "SKILL.md")))
-      .map((name) => {
-        const raw = readFileSync(join(path, name, "SKILL.md"), "utf-8");
+    const assets: ImportedAsset[] = [];
+
+    const skillsDir = join(path, "skills");
+    if (existsSync(skillsDir)) {
+      // statSync (not Dirent.isDirectory) so symlinked skill dirs — e.g. plugin-installed
+      // skills — are detected; Dirent.isDirectory() ignores what a symlink points to.
+      // existsSync first since a dangling symlink would otherwise throw in statSync.
+      for (const name of readdirSync(skillsDir)) {
+        const dir = join(skillsDir, name);
+        const file = join(dir, "SKILL.md");
+        if (!existsSync(dir) || !statSync(dir).isDirectory() || !existsSync(file)) continue;
+        const raw = readFileSync(file, "utf-8");
         // Claude Code skills always use YAML frontmatter (never the HTML-comment header
         // used by windsurf/cursor/copilot) — parseHeader/stripCoactlHeader never match
         // here, so the frontmatter was never stripped and ended up duplicated in the body.
-        return { id: name, kind: "skill" as AssetKind, body: stripYamlFrontmatter(raw) };
-      });
+        assets.push({ id: name, kind: "skill", body: stripYamlFrontmatter(raw), description: extractDescription(raw) });
+      }
+    }
+
+    // Commands and workflows both land in .claude/commands/{id}.md (flat files, no
+    // subdirectory) — only the "kind: workflow" frontmatter field tells them apart.
+    const commandsDir = join(path, "commands");
+    if (existsSync(commandsDir)) {
+      for (const file of readdirSync(commandsDir)) {
+        if (!file.endsWith(".md")) continue;
+        const raw = readFileSync(join(commandsDir, file), "utf-8");
+        const kind: AssetKind = isWorkflowFrontmatter(raw) ? "workflow" : "command";
+        assets.push({ id: basename(file, ".md"), kind, body: stripYamlFrontmatter(raw), description: extractDescription(raw) });
+      }
+    }
+
+    const rulesDir = join(path, "rules");
+    if (existsSync(rulesDir)) {
+      for (const file of readdirSync(rulesDir)) {
+        if (!file.endsWith(".md")) continue;
+        const raw = readFileSync(join(rulesDir, file), "utf-8");
+        assets.push({ id: basename(file, ".md"), kind: "rule", body: stripYamlFrontmatter(raw), description: extractDescription(raw) });
+      }
+    }
+
+    return assets;
   }
 
   if (tool === "cursor") {
@@ -92,6 +135,7 @@ export function listAssets(tool: ToolSource, global?: boolean): ImportedAsset[] 
           id: basename(f, ".mdc"),
           kind: kindFromCursorFrontmatter(raw),
           body: stripCoactlHeader(stripYamlFrontmatter(raw)),
+          description: extractDescription(raw),
         };
       });
   }
@@ -124,7 +168,7 @@ function writeAsset(asset: ImportedAsset, root: string, force?: boolean): boolea
   }
 
   mkdirSync(dir, { recursive: true });
-  const frontmatter = renderClaudeAssetFrontmatter({ id: asset.id, kind: asset.kind });
+  const frontmatter = renderClaudeAssetFrontmatter({ id: asset.id, kind: asset.kind, description: asset.description });
   writeFileSync(fullPath, frontmatter + asset.body);
   p.log.success(`Imported ${chalk.bold(asset.id)} (${asset.kind}) → ${fullPath}`);
   return true;

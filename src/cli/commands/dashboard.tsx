@@ -229,7 +229,7 @@ export async function buildDashboardProps(options: { global?: boolean; project?:
         // Guard against clobbering an existing authored asset (CLI import requires --force).
         if (existsSync(fullPath)) { errors.push(`${id}: already exists (skipped)`); continue; }
         mkdirSync(dir, { recursive: true });
-        writeFileSync(fullPath, renderClaudeAssetFrontmatter({ id: asset.id, kind: asset.kind }) + asset.body);
+        writeFileSync(fullPath, renderClaudeAssetFrontmatter({ id: asset.id, kind: asset.kind, description: asset.description }) + asset.body);
         imported++;
       } catch (err) {
         errors.push(`${id}: ${(err as Error).message}`);
