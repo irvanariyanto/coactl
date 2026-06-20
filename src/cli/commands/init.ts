@@ -9,11 +9,9 @@ import { BRAND } from "../../tui/theme.js";
 export async function initAction(options: { force?: boolean; global?: boolean }): Promise<void> {
   p.intro(chalk.bgCyan(chalk.black(` ${BRAND} init `)));
 
-  const manifestPath = options.global ? globalManifestPath() : resolve("./agent.manifest.yaml");
+  const manifestPath = options.global ? globalManifestPath() : resolve(".coactl/agent.manifest.yaml");
 
-  if (options.global) {
-    mkdirSync(dirname(manifestPath), { recursive: true });
-  }
+  mkdirSync(dirname(manifestPath), { recursive: true });
 
   if (existsSync(manifestPath) && !options.force) {
     const overwrite = await p.confirm({ message: "agent.manifest.yaml already exists. Overwrite?" });
@@ -26,15 +24,15 @@ export async function initAction(options: { force?: boolean; global?: boolean })
   const interactive = process.stdin.isTTY;
 
   let sourceName = "local";
-  let assetsPath = "./.coactl";
+  let assetsPath = ".";
 
   if (interactive) {
     const nameInput = await p.text({ message: "Local source name", placeholder: "local", defaultValue: "local" });
     if (p.isCancel(nameInput)) { p.cancel("Aborted."); return; }
-    const pathInput = await p.text({ message: "Assets directory path", placeholder: "./.coactl", defaultValue: "./.coactl" });
+    const pathInput = await p.text({ message: "Assets directory path (relative to .coactl/)", placeholder: ".", defaultValue: "." });
     if (p.isCancel(pathInput)) { p.cancel("Aborted."); return; }
     sourceName = (nameInput as string) || "local";
-    assetsPath = (pathInput as string) || "./.coactl";
+    assetsPath = (pathInput as string) || ".";
   }
 
   const manifest = {
@@ -43,9 +41,9 @@ export async function initAction(options: { force?: boolean; global?: boolean })
   };
 
   writeFileSync(manifestPath, stringify(manifest), "utf-8");
-  p.log.success(`Created ${chalk.cyan("agent.manifest.yaml")}`);
+  p.log.success(`Created ${chalk.cyan(options.global ? "agent.manifest.yaml" : ".coactl/agent.manifest.yaml")}`);
 
-  const absAssetsDir = options.global ? join(globalConfigDir(), assetsPath) : resolve(assetsPath);
+  const absAssetsDir = join(dirname(resolve(manifestPath)), assetsPath);
   if (!existsSync(absAssetsDir)) {
     for (const subdir of ["skills", "commands", "workflows", "rules"]) {
       mkdirSync(join(absAssetsDir, subdir), { recursive: true });

@@ -4,7 +4,7 @@ import { LocalSource } from "../../src/sources/local.js";
 import { buildSourceLoaders } from "../../src/sources/registry-of-sources.js";
 
 const COACTL_DIR = join(process.cwd(), "test/fixtures/workspace/.coactl");
-const MANIFEST_PATH = join(process.cwd(), "test/fixtures/workspace/agent.manifest.yaml");
+const MANIFEST_PATH = join(process.cwd(), "test/fixtures/workspace/.coactl/agent.manifest.yaml");
 
 describe("LocalSource", () => {
   it("loads all valid assets from the source path", async () => {

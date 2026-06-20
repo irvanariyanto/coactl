@@ -36,7 +36,7 @@ export interface ResolvedScope {
 export function findProjectManifest(startDir: string = process.cwd()): string | undefined {
   let dir = resolve(startDir);
   for (;;) {
-    const candidate = join(dir, "agent.manifest.yaml");
+    const candidate = join(dir, ".coactl", "agent.manifest.yaml");
     if (existsSync(candidate)) return candidate;
     const parent = dirname(dir);
     if (parent === dir) return undefined;
@@ -51,7 +51,7 @@ export function findProjectManifest(startDir: string = process.cwd()): string | 
 export function resolveScope(options: ManifestScopeOptions = {}): ResolvedScope {
   if (options.global) return { path: globalManifestPath(), scope: "global" };
   const found = findProjectManifest();
-  if (options.project) return { path: found ?? resolve("./agent.manifest.yaml"), scope: "project" };
+  if (options.project) return { path: found ?? resolve(".coactl/agent.manifest.yaml"), scope: "project" };
   if (found) return { path: found, scope: "project" };
   return { path: globalManifestPath(), scope: "global" };
 }

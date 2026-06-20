@@ -1,0 +1,7 @@
+sources:
+  - name: local-assets
+    type: local
+    path: .
+resolution:
+  precedence:
+    - local-assets
