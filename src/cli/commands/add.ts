@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { ASSET_KINDS } from "../../schema/index.js";
 import { loadClaudeFormat } from "../../schema/load.js";
 import { renderClaudeAssetMd } from "../../scaffold/templates.js";
-import { globalRootDir } from "../../io/global-paths.js";
+import { globalConfigDir } from "../../io/global-paths.js";
 import { BRAND } from "../../tui/theme.js";
 import type { AssetKind } from "../../schema/index.js";
 
@@ -13,13 +13,10 @@ const KEBAB_REGEX = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 function claudeAssetPath(kind: AssetKind, id: string, root: string): { dir: string; file: string } {
   switch (kind) {
-    case "skill":
-      return { dir: join(root, ".claude", "skills", id), file: "SKILL.md" };
-    case "command":
-    case "workflow":
-      return { dir: join(root, ".claude", "commands"), file: `${id}.md` };
-    case "rule":
-      return { dir: join(root, ".claude", "rules"), file: `${id}.md` };
+    case "skill":    return { dir: join(root, "skills",    id), file: "SKILL.md" };
+    case "command":  return { dir: join(root, "commands",  id), file: "COMMAND.md" };
+    case "workflow": return { dir: join(root, "workflows", id), file: "WORKFLOW.md" };
+    case "rule":     return { dir: join(root, "rules",     id), file: "RULE.md" };
   }
 }
 
@@ -57,7 +54,7 @@ export async function addAction(id: string, options: { kind?: string; force?: bo
     return;
   }
 
-  const root = options.global ? globalRootDir() : process.cwd();
+  const root = options.global ? globalConfigDir() : join(process.cwd(), ".coactl");
   const { dir, file } = claudeAssetPath(kind as AssetKind, id, root);
   const fullPath = join(dir, file);
 

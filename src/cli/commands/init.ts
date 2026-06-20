@@ -26,15 +26,15 @@ export async function initAction(options: { force?: boolean; global?: boolean })
   const interactive = process.stdin.isTTY;
 
   let sourceName = "local";
-  let assetsPath = "./assets";
+  let assetsPath = "./.coactl";
 
   if (interactive) {
     const nameInput = await p.text({ message: "Local source name", placeholder: "local", defaultValue: "local" });
     if (p.isCancel(nameInput)) { p.cancel("Aborted."); return; }
-    const pathInput = await p.text({ message: "Assets directory path", placeholder: "./assets", defaultValue: "./assets" });
+    const pathInput = await p.text({ message: "Assets directory path", placeholder: "./.coactl", defaultValue: "./.coactl" });
     if (p.isCancel(pathInput)) { p.cancel("Aborted."); return; }
     sourceName = (nameInput as string) || "local";
-    assetsPath = (pathInput as string) || "./assets";
+    assetsPath = (pathInput as string) || "./.coactl";
   }
 
   const manifest = {
@@ -47,7 +47,9 @@ export async function initAction(options: { force?: boolean; global?: boolean })
 
   const absAssetsDir = options.global ? join(globalConfigDir(), assetsPath) : resolve(assetsPath);
   if (!existsSync(absAssetsDir)) {
-    mkdirSync(absAssetsDir, { recursive: true });
+    for (const subdir of ["skills", "commands", "workflows", "rules"]) {
+      mkdirSync(join(absAssetsDir, subdir), { recursive: true });
+    }
     p.log.success(`Created ${chalk.cyan(assetsPath + "/")}`);
   }
 

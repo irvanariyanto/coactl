@@ -33,7 +33,7 @@ describe("add command", () => {
 
   it("scaffolds a valid skill asset", () => {
     run(["add", "--kind", "skill", "test-skill"], tmpDir);
-    const filePath = join(tmpDir, ".claude/skills/test-skill/SKILL.md");
+    const filePath = join(tmpDir, ".coactl/skills/test-skill/SKILL.md");
     expect(existsSync(filePath)).toBe(true);
     const result = loadClaudeFormat(filePath, "test-skill", "skill");
     expect(result?.asset.id).toBe("test-skill");
@@ -42,7 +42,7 @@ describe("add command", () => {
 
   it("scaffolds a valid command asset", () => {
     run(["add", "--kind", "command", "test-command"], tmpDir);
-    const filePath = join(tmpDir, ".claude/commands/test-command.md");
+    const filePath = join(tmpDir, ".coactl/commands/test-command/COMMAND.md");
     expect(existsSync(filePath)).toBe(true);
     const result = loadClaudeFormat(filePath, "test-command", "command");
     expect(result?.asset.id).toBe("test-command");
@@ -51,7 +51,7 @@ describe("add command", () => {
 
   it("scaffolds a valid rule asset", () => {
     run(["add", "--kind", "rule", "test-rule"], tmpDir);
-    const filePath = join(tmpDir, ".claude/rules/test-rule.md");
+    const filePath = join(tmpDir, ".coactl/rules/test-rule/RULE.md");
     expect(existsSync(filePath)).toBe(true);
     const result = loadClaudeFormat(filePath, "test-rule", "rule");
     expect(result?.asset.id).toBe("test-rule");
@@ -60,7 +60,7 @@ describe("add command", () => {
 
   it("scaffolds a valid workflow asset", () => {
     run(["add", "--kind", "workflow", "test-workflow"], tmpDir);
-    const filePath = join(tmpDir, ".claude/commands/test-workflow.md");
+    const filePath = join(tmpDir, ".coactl/workflows/test-workflow/WORKFLOW.md");
     expect(existsSync(filePath)).toBe(true);
     const result = loadClaudeFormat(filePath, "test-workflow", "command");
     expect(result?.asset.id).toBe("test-workflow");
@@ -69,13 +69,13 @@ describe("add command", () => {
 
   it("command kind includes invocation field", () => {
     run(["add", "--kind", "command", "my-cmd"], tmpDir);
-    const content = readFileSync(join(tmpDir, ".claude/commands/my-cmd.md"), "utf-8");
+    const content = readFileSync(join(tmpDir, ".coactl/commands/my-cmd/COMMAND.md"), "utf-8");
     expect(content).toContain("invocation: /my-cmd");
   });
 
   it("workflow kind includes steps with loop", () => {
     run(["add", "--kind", "workflow", "my-flow"], tmpDir);
-    const content = readFileSync(join(tmpDir, ".claude/commands/my-flow.md"), "utf-8");
+    const content = readFileSync(join(tmpDir, ".coactl/workflows/my-flow/WORKFLOW.md"), "utf-8");
     expect(content).toContain("steps:");
     expect(content).toContain("loop:");
   });
@@ -89,18 +89,18 @@ describe("add command", () => {
   it("overwrites with --force", () => {
     run(["add", "--kind", "skill", "my-skill"], tmpDir);
     run(["add", "--kind", "skill", "my-skill", "--force"], tmpDir);
-    expect(existsSync(join(tmpDir, ".claude/skills/my-skill/SKILL.md"))).toBe(true);
+    expect(existsSync(join(tmpDir, ".coactl/skills/my-skill/SKILL.md"))).toBe(true);
   });
 
   it("rejects non-kebab-case id without writing files", () => {
     const output = run(["add", "--kind", "skill", "Invalid_ID"], tmpDir);
-    expect(existsSync(join(tmpDir, ".claude/skills/Invalid_ID"))).toBe(false);
+    expect(existsSync(join(tmpDir, ".coactl/skills/Invalid_ID"))).toBe(false);
     expect(output).toContain("kebab-case");
   });
 
   it("rejects unknown kind without writing files", () => {
     const output = run(["add", "--kind", "unknown", "my-asset"], tmpDir);
-    expect(existsSync(join(tmpDir, ".claude"))).toBe(false);
+    expect(existsSync(join(tmpDir, ".coactl"))).toBe(false);
     expect(output).toContain("unknown");
   });
 });
