@@ -5,12 +5,13 @@ import { join, resolve } from "node:path";
 import { ASSET_KINDS } from "../../schema/index.js";
 import { loadAsset } from "../../schema/load.js";
 import { renderAssetYaml, renderBodyMd } from "../../scaffold/templates.js";
+import { globalAssetsDir } from "../../io/global-paths.js";
 import { BRAND } from "../../tui/theme.js";
 import type { AssetKind } from "../../schema/index.js";
 
 const KEBAB_REGEX = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
-export async function addAction(id: string, options: { kind?: string; force?: boolean }): Promise<void> {
+export async function addAction(id: string, options: { kind?: string; force?: boolean; global?: boolean }): Promise<void> {
   p.intro(chalk.bgCyan(chalk.black(` ${BRAND} add `)));
 
   if (!KEBAB_REGEX.test(id)) {
@@ -44,7 +45,7 @@ export async function addAction(id: string, options: { kind?: string; force?: bo
     return;
   }
 
-  const assetDir = resolve(process.cwd(), "assets", id);
+  const assetDir = options.global ? resolve(globalAssetsDir(), id) : resolve(process.cwd(), "assets", id);
 
   if (existsSync(assetDir) && !options.force) {
     p.log.error(`Asset "${id}" already exists at ${assetDir}. Use --force to overwrite.`);

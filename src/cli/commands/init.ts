@@ -1,14 +1,19 @@
 import * as p from "@clack/prompts";
 import chalk from "chalk";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { stringify } from "yaml";
+import { globalConfigDir, globalManifestPath } from "../../io/global-paths.js";
 import { BRAND } from "../../tui/theme.js";
 
-export async function initAction(options: { force?: boolean }): Promise<void> {
+export async function initAction(options: { force?: boolean; global?: boolean }): Promise<void> {
   p.intro(chalk.bgCyan(chalk.black(` ${BRAND} init `)));
 
-  const manifestPath = resolve("./agent.manifest.yaml");
+  const manifestPath = options.global ? globalManifestPath() : resolve("./agent.manifest.yaml");
+
+  if (options.global) {
+    mkdirSync(dirname(manifestPath), { recursive: true });
+  }
 
   if (existsSync(manifestPath) && !options.force) {
     const overwrite = await p.confirm({ message: "agent.manifest.yaml already exists. Overwrite?" });
@@ -40,11 +45,11 @@ export async function initAction(options: { force?: boolean }): Promise<void> {
   writeFileSync(manifestPath, stringify(manifest), "utf-8");
   p.log.success(`Created ${chalk.cyan("agent.manifest.yaml")}`);
 
-  const absAssetsDir = resolve(assetsPath);
+  const absAssetsDir = options.global ? join(globalConfigDir(), assetsPath) : resolve(assetsPath);
   if (!existsSync(absAssetsDir)) {
     mkdirSync(absAssetsDir, { recursive: true });
     p.log.success(`Created ${chalk.cyan(assetsPath + "/")}`);
   }
 
-  p.outro(chalk.green(`Project ready. Run ${chalk.bold("coactl add --kind rule my-first-rule")} to scaffold your first asset.`));
+  p.outro(chalk.green(`${options.global ? "Global config" : "Project"} ready. Run ${chalk.bold(`coactl add --kind rule my-first-rule${options.global ? " --global" : ""}`)} to scaffold your first asset.`));
 }

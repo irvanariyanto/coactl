@@ -8,6 +8,22 @@ export function globalRootDir(): string {
   return homedir();
 }
 
+export function globalConfigDir(): string {
+  return join(homedir(), ".config", "coactl");
+}
+
+export function globalManifestPath(): string {
+  return join(globalConfigDir(), "agent.manifest.yaml");
+}
+
+export function globalAssetsDir(): string {
+  return join(globalConfigDir(), "assets");
+}
+
+export function resolveManifestPath(global?: boolean): string {
+  return global ? globalManifestPath() : "./agent.manifest.yaml";
+}
+
 export function globalBasePath(target: Target): string {
   const home = homedir();
   switch (target) {

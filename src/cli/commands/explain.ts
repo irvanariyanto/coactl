@@ -5,13 +5,15 @@ import { transform } from "../../transform/engine.js";
 import { loadManifest } from "../../schema/load.js";
 import { capabilityFor } from "../../adapters/capability-matrix.js";
 import { createTable, printHeader } from "../../ui/output.js";
+import { resolveManifestPath } from "../../io/global-paths.js";
 
-export async function explainAction(id: string, options: { json?: boolean }): Promise<void> {
+export async function explainAction(id: string, options: { json?: boolean; global?: boolean }): Promise<void> {
   if (!options.json) printHeader(`explain ${id}`);
 
   try {
-    const manifest = loadManifest("./agent.manifest.yaml");
-    const loaders = buildSourceLoaders("./agent.manifest.yaml");
+    const manifestPath = resolveManifestPath(options.global);
+    const manifest = loadManifest(manifestPath);
+    const loaders = buildSourceLoaders(manifestPath);
     const allLoaded = [];
     for (const loader of loaders) {
       const result = await loader.load();

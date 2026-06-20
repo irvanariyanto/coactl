@@ -22,14 +22,14 @@ export const commandSpecs: CommandSpec[] = [
     name: "init",
     description: "Initialize a new coactl project (creates agent.manifest.yaml)",
     configure: (cmd) => {
-      cmd.option("--force", "overwrite existing manifest").action(initAction);
+      cmd.option("--force", "overwrite existing manifest").option("--global", "create in global config dir (~/.config/coactl/)").action(initAction);
     },
   },
   {
     name: "add",
     description: "Scaffold a schema-valid asset",
     configure: (cmd) => {
-      cmd.argument("<id>", "asset id").option("--kind <kind>", "asset kind").option("--force", "overwrite if asset already exists").action(addAction);
+      cmd.argument("<id>", "asset id").option("--kind <kind>", "asset kind").option("--force", "overwrite if asset already exists").option("--global", "add to global assets dir").action(addAction);
     },
   },
   {
@@ -47,28 +47,28 @@ export const commandSpecs: CommandSpec[] = [
     name: "install",
     description: "Fetch and install an asset by id and version",
     configure: (cmd) => {
-      cmd.argument("<idAtVersion>", "asset id@version").action(installAction);
+      cmd.argument("<idAtVersion>", "asset id@version").option("--global", "use global manifest").action(installAction);
     },
   },
   {
     name: "update",
     description: "Update installed assets",
     configure: (cmd) => {
-      cmd.action(updateAction);
+      cmd.option("--global", "use global manifest").action(updateAction);
     },
   },
   {
     name: "override",
     description: "Apply an override to an asset",
     configure: (cmd) => {
-      cmd.argument("<id>", "asset id").action(overrideAction);
+      cmd.argument("<id>", "asset id").option("--global", "use global manifest").action(overrideAction);
     },
   },
   {
     name: "build",
     description: "Transform the registry into a target tool's native format",
     configure: (cmd) => {
-      cmd.option("--target <tool>", "target tool").action(buildAction);
+      cmd.option("--target <tool>", "target tool").option("--global", "use global manifest").action(buildAction);
     },
   },
   {
@@ -85,21 +85,21 @@ export const commandSpecs: CommandSpec[] = [
     name: "status",
     description: "Detect drift between generated files and the registry",
     configure: (cmd) => {
-      cmd.option("--json", "output as JSON").action(statusAction);
+      cmd.option("--json", "output as JSON").option("--global", "use global manifest").action(statusAction);
     },
   },
   {
     name: "why",
     description: "Show the winning source and override chain for an asset",
     configure: (cmd) => {
-      cmd.argument("<id>", "asset id").option("--json", "output as JSON").action(whyAction);
+      cmd.argument("<id>", "asset id").option("--json", "output as JSON").option("--global", "use global manifest").action(whyAction);
     },
   },
   {
     name: "explain",
     description: "Explain how an asset resolves",
     configure: (cmd) => {
-      cmd.argument("<id>", "asset id").option("--json", "output as JSON").action(explainAction);
+      cmd.argument("<id>", "asset id").option("--json", "output as JSON").option("--global", "use global manifest").action(explainAction);
     },
   },
 ];

@@ -4,8 +4,9 @@ import { buildSourceLoaders } from "../../sources/registry-of-sources.js";
 import { computeIntegrity } from "../../registry/integrity.js";
 import { readLockfile, writeLockfile, upsertLockEntry } from "../../registry/lockfile.js";
 import { createSpinner, printHeader } from "../../ui/output.js";
+import { resolveManifestPath } from "../../io/global-paths.js";
 
-export async function updateAction(): Promise<void> {
+export async function updateAction(options: { global?: boolean }): Promise<void> {
   printHeader("update");
 
   const spinner = createSpinner("Loading lockfile and sources...").start();
@@ -20,7 +21,7 @@ export async function updateAction(): Promise<void> {
       return;
     }
 
-    const loaders = buildSourceLoaders("./agent.manifest.yaml");
+    const loaders = buildSourceLoaders(resolveManifestPath(options.global));
     let changed = 0;
     let updated = lockfile;
 

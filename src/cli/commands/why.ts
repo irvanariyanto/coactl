@@ -3,13 +3,15 @@ import { buildSourceLoaders } from "../../sources/registry-of-sources.js";
 import { resolveRegistry } from "../../registry/resolve.js";
 import { loadManifest } from "../../schema/load.js";
 import { createTable, printHeader } from "../../ui/output.js";
+import { resolveManifestPath } from "../../io/global-paths.js";
 
-export async function whyAction(id: string, options: { json?: boolean }): Promise<void> {
+export async function whyAction(id: string, options: { json?: boolean; global?: boolean }): Promise<void> {
   if (!options.json) printHeader(`why ${id}`);
 
   try {
-    const manifest = loadManifest("./agent.manifest.yaml");
-    const loaders = buildSourceLoaders("./agent.manifest.yaml");
+    const manifestPath = resolveManifestPath(options.global);
+    const manifest = loadManifest(manifestPath);
+    const loaders = buildSourceLoaders(manifestPath);
     const allLoaded = [];
     for (const loader of loaders) {
       const result = await loader.load();

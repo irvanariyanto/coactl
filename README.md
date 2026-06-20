@@ -36,6 +36,7 @@
 
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Global Setup](#global-setup)
 - [Concepts](#concepts)
 - [Commands](#commands)
 - [External Sources](#external-sources)
@@ -80,6 +81,34 @@ coactl sync
 # 6. Open the interactive dashboard
 coactl dashboard
 ```
+
+---
+
+## Global Setup
+
+Use `--global` to manage assets that apply across every project on your machine, not just the current directory. Global config lives at `~/.config/coactl/` and syncs to each tool's user-level config directory (`~/.claude/`, `~/.cursor/`, etc.).
+
+```bash
+# 1. Bootstrap the global config (one-time)
+coactl init --global
+
+# 2. Scaffold a global asset
+coactl add --kind rule my-standards --global
+
+# 3. Edit it
+$EDITOR ~/.config/coactl/assets/my-standards/body.md
+
+# 4. Sync to all tools globally
+coactl sync --global
+```
+
+All commands support `--global`. Without it, commands read and write inside the current project directory as usual.
+
+| Path | Purpose |
+|------|---------|
+| `~/.config/coactl/agent.manifest.yaml` | Global manifest (sources, overrides) |
+| `~/.config/coactl/assets/` | Global asset definitions |
+| `~/.claude/`, `~/.cursor/`, … | Tool-specific output (written by `sync --global`) |
 
 ---
 

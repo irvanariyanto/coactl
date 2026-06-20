@@ -5,9 +5,10 @@ import { resolveRegistry } from "../../registry/resolve.js";
 import { transform } from "../../transform/engine.js";
 import { loadManifest } from "../../schema/load.js";
 import { createSpinner, createTable, printHeader } from "../../ui/output.js";
+import { resolveManifestPath } from "../../io/global-paths.js";
 import type { Target, AssetKind } from "../../schema/index.js";
 
-export async function buildAction(options: { target?: string; kind?: string }): Promise<void> {
+export async function buildAction(options: { target?: string; kind?: string; global?: boolean }): Promise<void> {
   printHeader("build");
 
   if (!options.target) {
@@ -19,8 +20,9 @@ export async function buildAction(options: { target?: string; kind?: string }): 
   const spinner = createSpinner("Loading manifest and sources...").start();
 
   try {
-    const manifest = loadManifest("./agent.manifest.yaml");
-    const loaders = buildSourceLoaders("./agent.manifest.yaml");
+    const manifestPath = resolveManifestPath(options.global);
+    const manifest = loadManifest(manifestPath);
+    const loaders = buildSourceLoaders(manifestPath);
 
     const allLoaded = [];
     for (const loader of loaders) {

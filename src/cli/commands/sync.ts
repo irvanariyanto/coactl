@@ -5,7 +5,7 @@ import { resolveRegistry } from "../../registry/resolve.js";
 import { transform } from "../../transform/engine.js";
 import { loadManifest } from "../../schema/load.js";
 import { writeFiles } from "../../io/write-files.js";
-import { globalRootDir } from "../../io/global-paths.js";
+import { globalRootDir, resolveManifestPath } from "../../io/global-paths.js";
 import { createSpinner, printHeader } from "../../ui/output.js";
 import type { AssetKind, Target } from "../../schema/index.js";
 
@@ -20,8 +20,9 @@ export async function syncAction(options: { global?: boolean; kind?: string; tar
   const spinner = createSpinner("Loading manifest and sources...").start();
 
   try {
-    const manifest = loadManifest("./agent.manifest.yaml");
-    const loaders = buildSourceLoaders("./agent.manifest.yaml");
+    const manifestPath = resolveManifestPath(options.global);
+    const manifest = loadManifest(manifestPath);
+    const loaders = buildSourceLoaders(manifestPath);
 
     const allLoaded = [];
     for (const loader of loaders) {

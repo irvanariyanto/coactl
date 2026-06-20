@@ -5,9 +5,10 @@ import { loadManifest } from "../../schema/load.js";
 import { computeIntegrity } from "../../registry/integrity.js";
 import { readLockfile, writeLockfile, upsertLockEntry } from "../../registry/lockfile.js";
 import { createSpinner, printHeader } from "../../ui/output.js";
+import { resolveManifestPath } from "../../io/global-paths.js";
 import { BRAND } from "../../tui/theme.js";
 
-export async function installAction(idAtVersion: string): Promise<void> {
+export async function installAction(idAtVersion: string, options: { global?: boolean }): Promise<void> {
   p.intro(chalk.bgCyan(chalk.black(` ${BRAND} install `)));
   printHeader("install");
 
@@ -22,8 +23,9 @@ export async function installAction(idAtVersion: string): Promise<void> {
   const spinner = createSpinner(`Searching sources for ${chalk.bold(id)}...`).start();
 
   try {
-    const manifest = loadManifest("./agent.manifest.yaml");
-    const loaders = buildSourceLoaders("./agent.manifest.yaml");
+    const manifestPath = resolveManifestPath(options.global);
+    const manifest = loadManifest(manifestPath);
+    const loaders = buildSourceLoaders(manifestPath);
 
     let foundAsset: { id: string; sourceName: string; dir: string; version?: string } | null = null;
 
