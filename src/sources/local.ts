@@ -4,10 +4,11 @@ import { loadClaudeFormat } from "../schema/load.js";
 import type { AssetKind } from "../schema/asset.js";
 import type { LoadResult, SourceLoader } from "./types.js";
 
-const ASSET_FILES: Array<{ file: string; kind: AssetKind }> = [
-  { file: "SKILL.md", kind: "skill" },
-  { file: "COMMAND.md", kind: "command" },
-  { file: "RULE.md", kind: "rule" },
+const KIND_DIRS: Array<{ subdir: string; file: string; kind: AssetKind }> = [
+  { subdir: "skills",    file: "SKILL.md",    kind: "skill" },
+  { subdir: "commands",  file: "COMMAND.md",  kind: "command" },
+  { subdir: "workflows", file: "WORKFLOW.md", kind: "workflow" },
+  { subdir: "rules",     file: "RULE.md",     kind: "rule" },
 ];
 
 export class LocalSource implements SourceLoader {
@@ -21,15 +22,13 @@ export class LocalSource implements SourceLoader {
     const assets: LoadResult["assets"] = [];
     const errors: LoadResult["errors"] = [];
 
-    const assetsDir = root;
-    if (!existsSync(assetsDir)) return { assets, errors };
-
-    for (const entry of readdirSync(assetsDir, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const id = entry.name;
-      const dir = join(assetsDir, id);
-
-      for (const { file, kind } of ASSET_FILES) {
+    for (const { subdir, file, kind } of KIND_DIRS) {
+      const kindDir = join(root, subdir);
+      if (!existsSync(kindDir)) continue;
+      for (const entry of readdirSync(kindDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const id = entry.name;
+        const dir = join(kindDir, id);
         const filePath = join(dir, file);
         if (!existsSync(filePath)) continue;
         try {
@@ -39,7 +38,6 @@ export class LocalSource implements SourceLoader {
         } catch (err) {
           errors.push({ dir, error: err as Error });
         }
-        break;
       }
     }
 

@@ -88,12 +88,11 @@ function listAssets(tool: ToolSource, global?: boolean): ImportedAsset[] {
 }
 
 function assetPath(kind: AssetKind, id: string, root: string): { dir: string; file: string } {
-  const dir = join(root, "assets", id);
   switch (kind) {
-    case "skill":    return { dir, file: "SKILL.md" };
-    case "command":
-    case "workflow": return { dir, file: "COMMAND.md" };
-    case "rule":     return { dir, file: "RULE.md" };
+    case "skill":    return { dir: join(root, "skills",    id), file: "SKILL.md" };
+    case "command":  return { dir: join(root, "commands",  id), file: "COMMAND.md" };
+    case "workflow": return { dir: join(root, "workflows", id), file: "WORKFLOW.md" };
+    case "rule":     return { dir: join(root, "rules",     id), file: "RULE.md" };
   }
 }
 
@@ -133,7 +132,7 @@ export async function importAction(
   }
 
   const path = sourcePath(tool, options.global);
-  const root = options.global ? globalConfigDir() : process.cwd();
+  const root = options.global ? globalConfigDir() : join(process.cwd(), ".coactl");
 
   if (options.all) {
     const assets = listAssets(tool, options.global);

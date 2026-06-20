@@ -1,0 +1,14 @@
+---
+name: Skill One
+version: 0.1.0
+description: A test skill fixture
+activation: agent-requested
+triggers:
+  - type: glob
+    pattern: "**/*.ts"
+targets:
+  - claude-code
+  - cursor
+---
+
+Skill One body text.

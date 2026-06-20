@@ -1,7 +1,7 @@
 sources:
   - name: local-assets
     type: local
-    path: ./assets
+    path: ./.coactl
 resolution:
   precedence:
     - local-assets
