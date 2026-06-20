@@ -36,20 +36,24 @@ describe("ClaudeCodeAdapter", () => {
     }
   });
 
-  it("emits nothing for skills (source files live in .claude/ already)", () => {
+  it("emits skill as .claude/skills/<id>/SKILL.md with frontmatter", () => {
     const asset = makeResolvedAsset(FIXTURE_SKILL_DIR);
     const files = adapter.emit(asset);
-    expect(files).toHaveLength(0);
+    expect(files).toHaveLength(1);
+    expect(files[0].path).toBe(`.claude/skills/${asset.asset.id}/SKILL.md`);
+    expect(files[0].contents).toContain("---");
+    expect(files[0].contents).toContain("name:");
+    expect(files[0].contents).toContain("targets:");
   });
 
-  it("emits rule as part of CLAUDE.md with managed fences", () => {
+  it("emits rule as .claude/rules/<id>.md with frontmatter", () => {
     const asset = makeResolvedAsset(FIXTURE_RULE_DIR);
     const files = adapter.emit(asset);
     expect(files).toHaveLength(1);
-    expect(files[0].path).toBe("CLAUDE.md");
-    expect(files[0].contents).toContain(`<!-- BEGIN coactl:${asset.asset.id} -->`);
-    expect(files[0].contents).toContain(`<!-- END coactl:${asset.asset.id} -->`);
-    expect(files[0].contents).toContain("DO NOT EDIT");
+    expect(files[0].path).toBe(`.claude/rules/${asset.asset.id}.md`);
+    expect(files[0].contents).toContain("---");
+    expect(files[0].contents).toContain("name:");
+    expect(files[0].contents).toContain("targets:");
   });
 
   it("emits are idempotent (same rule asset → same output)", () => {

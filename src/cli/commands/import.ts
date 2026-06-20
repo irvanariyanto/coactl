@@ -5,7 +5,7 @@ import { basename, join } from "node:path";
 import { homedir } from "node:os";
 import { renderClaudeAssetFrontmatter } from "../../scaffold/templates.js";
 import { parseHeader } from "../../transform/header.js";
-import { globalRootDir } from "../../io/global-paths.js";
+import { globalConfigDir } from "../../io/global-paths.js";
 import { BRAND } from "../../tui/theme.js";
 import type { AssetKind } from "../../schema/index.js";
 
@@ -21,7 +21,7 @@ interface ImportedAsset {
 function sourcePath(tool: ToolSource, global?: boolean): string {
   const base = global ? homedir() : process.cwd();
   switch (tool) {
-    case "claude-code": return join(base, ".claude", "skills");
+    case "claude-code": return join(homedir(), ".claude", "skills");
     case "cursor":      return join(base, ".cursor", "rules");
     case "windsurf":    return join(base, ".windsurfrules");
     case "copilot":     return join(base, ".github", "copilot-instructions.md");
@@ -87,20 +87,18 @@ function listAssets(tool: ToolSource, global?: boolean): ImportedAsset[] {
   return [{ id, kind: "rule" as AssetKind, body: content.trimStart() }];
 }
 
-function claudeAssetPath(kind: AssetKind, id: string, root: string): { dir: string; file: string } {
+function assetPath(kind: AssetKind, id: string, root: string): { dir: string; file: string } {
+  const dir = join(root, "assets", id);
   switch (kind) {
-    case "skill":
-      return { dir: join(root, ".claude", "skills", id), file: "SKILL.md" };
+    case "skill":    return { dir, file: "SKILL.md" };
     case "command":
-    case "workflow":
-      return { dir: join(root, ".claude", "commands"), file: `${id}.md` };
-    case "rule":
-      return { dir: join(root, ".claude", "rules"), file: `${id}.md` };
+    case "workflow": return { dir, file: "COMMAND.md" };
+    case "rule":     return { dir, file: "RULE.md" };
   }
 }
 
 function writeAsset(asset: ImportedAsset, root: string, force?: boolean): boolean {
-  const { dir, file } = claudeAssetPath(asset.kind, asset.id, root);
+  const { dir, file } = assetPath(asset.kind, asset.id, root);
   const fullPath = join(dir, file);
 
   if (existsSync(fullPath) && !force) {
@@ -135,7 +133,7 @@ export async function importAction(
   }
 
   const path = sourcePath(tool, options.global);
-  const root = options.global ? globalRootDir() : process.cwd();
+  const root = options.global ? globalConfigDir() : process.cwd();
 
   if (options.all) {
     const assets = listAssets(tool, options.global);

@@ -25,7 +25,7 @@ describe("transform engine", () => {
     const result = transform(registry, MANIFEST);
 
     expect(result.files.length).toBeGreaterThan(0);
-    expect(result.files.some((f) => f.path === "CLAUDE.md")).toBe(true);
+    expect(result.files.some((f) => f.path.includes(".claude/rules"))).toBe(true);
     expect(result.files.some((f) => f.path.includes(".cursor"))).toBe(true);
   });
 

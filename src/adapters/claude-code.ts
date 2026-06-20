@@ -1,9 +1,25 @@
-import { contentHash, renderHeader } from "../transform/header.js";
+import { stringify } from "yaml";
 import { capabilityFor } from "./capability-matrix.js";
-import { compileWorkflowSteps } from "../transform/workflow.js";
 import type { Adapter, EmittedFile } from "./types.js";
 import type { ResolvedAsset } from "../registry/types.js";
-import type { AssetKind } from "../schema/index.js";
+import type { Asset, AssetKind } from "../schema/index.js";
+
+function renderFrontmatter(asset: Asset): string {
+  const fm: Record<string, unknown> = {
+    name: asset.name,
+    version: asset.version,
+    description: asset.description,
+    activation: asset.activation,
+    targets: asset.targets,
+  };
+  if (asset.kind === "workflow") fm.kind = "workflow";
+  if (asset.invocation !== undefined) fm.invocation = asset.invocation;
+  if (asset.scope !== undefined) fm.scope = asset.scope;
+  if (asset.triggers !== undefined) fm.triggers = asset.triggers;
+  if (asset.steps !== undefined) fm.steps = asset.steps;
+  if (asset.priority !== undefined) fm.priority = asset.priority;
+  return `---\n${stringify(fm).trimEnd()}\n---\n\n`;
+}
 
 export class ClaudeCodeAdapter implements Adapter {
   target = "claude-code" as const;
@@ -14,27 +30,16 @@ export class ClaudeCodeAdapter implements Adapter {
 
   emit(asset: ResolvedAsset): EmittedFile[] {
     const id = asset.asset.id;
+    const contents = renderFrontmatter(asset.asset) + asset.bodyText;
 
     switch (asset.asset.kind) {
       case "skill":
+        return [{ path: `.claude/skills/${id}/SKILL.md`, contents, assetId: id }];
       case "command":
       case "workflow":
-        // Source files live in .claude/ already — no emit needed
-        return [];
-
-      case "rule": {
-        const hash = contentHash(asset.bodyText);
-        const header = renderHeader({
-          assetId: id,
-          source: asset.sourceName,
-          hash,
-          commentSyntax: "<!-- -->",
-        });
-        const fenceStart = `<!-- BEGIN coactl:${id} -->`;
-        const fenceEnd = `<!-- END coactl:${id} -->`;
-        const contents = `${fenceStart}\n${header}${asset.bodyText}\n${fenceEnd}`;
-        return [{ path: "CLAUDE.md", contents, assetId: id }];
-      }
+        return [{ path: `.claude/commands/${id}.md`, contents, assetId: id }];
+      case "rule":
+        return [{ path: `.claude/rules/${id}.md`, contents, assetId: id }];
     }
   }
 }
