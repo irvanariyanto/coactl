@@ -39,7 +39,7 @@ async function loadScopeData(
   }
 
   const registry = resolveRegistry(allLoaded, manifest);
-  const { files: emittedFiles } = transform(registry, manifest);
+  const { files: emittedFiles } = transform(registry, manifest, { scope: assetScope });
   const driftEntries = checkDrift(emittedFiles, rootDir);
 
   const assets: DashboardAsset[] = registry.all().map((ra) => {
@@ -78,7 +78,11 @@ async function loadScopeData(
   return { assets, sources, conflicts: registry.conflicts };
 }
 
-async function syncScope(manifestPath: string, rootDir: string): Promise<SyncResult> {
+async function syncScope(
+  manifestPath: string,
+  rootDir: string,
+  scope: "global" | "project",
+): Promise<SyncResult> {
   const manifest = loadManifest(manifestPath);
   const loaders = buildSourceLoaders(manifestPath);
   const allLoaded = [];
@@ -87,7 +91,7 @@ async function syncScope(manifestPath: string, rootDir: string): Promise<SyncRes
     allLoaded.push(...result.assets);
   }
   const registry = resolveRegistry(allLoaded, manifest);
-  const { files } = transform(registry, manifest);
+  const { files } = transform(registry, manifest, { scope });
   return writeFiles(files, rootDir);
 }
 
@@ -171,8 +175,8 @@ export async function buildDashboardProps(options: { global?: boolean; project?:
 
   const onSync = async (): Promise<SyncResult> => {
     const [globalResult, projectResult] = await Promise.all([
-      syncScope(globalPath, globalRoot),
-      isProject ? syncScope(projectManifestFound!, projectRoot!) : Promise.resolve(null),
+      syncScope(globalPath, globalRoot, "global"),
+      isProject ? syncScope(projectManifestFound!, projectRoot!, "project") : Promise.resolve(null),
     ]);
     return {
       written: globalResult.written + (projectResult?.written ?? 0),
@@ -230,7 +234,12 @@ export async function buildDashboardProps(options: { global?: boolean; project?:
         // Guard against clobbering an existing authored asset (CLI import requires --force).
         if (existsSync(fullPath)) { errors.push(`${id}: already exists (skipped)`); continue; }
         mkdirSync(dir, { recursive: true });
-        writeFileSync(fullPath, renderClaudeAssetFrontmatter({ id: asset.id, kind: asset.kind, description: asset.description }) + asset.body);
+        writeFileSync(fullPath, renderClaudeAssetFrontmatter({
+          id: asset.id,
+          kind: asset.kind,
+          description: asset.description,
+          includeCodexCommand: global,
+        }) + asset.body);
         imported++;
       } catch (err) {
         errors.push(`${id}: ${(err as Error).message}`);

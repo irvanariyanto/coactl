@@ -45,6 +45,18 @@ describe("renderHeader & parseHeader round-trip", () => {
     const parsed = parseHeader("no header here");
     expect(parsed).toBeNull();
   });
+
+  it("finds an HTML header placed after YAML frontmatter", () => {
+    const header = renderHeader({
+      assetId: "after-frontmatter",
+      source: "local",
+      hash: "sha256-test",
+      commentSyntax: "<!-- -->",
+    });
+    const parsed = parseHeader(`---\nname: Test\n---\n\n${header}body`);
+
+    expect(parsed?.assetId).toBe("after-frontmatter");
+  });
 });
 
 describe("renderHeader", () => {

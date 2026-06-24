@@ -14,7 +14,7 @@
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue)](https://www.typescriptlang.org)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-134%20passing-brightgreen)](#development)
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](#development)
 
 </div>
 
@@ -25,10 +25,11 @@
 ```
   Your assets                      Native outputs
   ──────────                       ──────────────
-  assets/
-    my-rule/             ──►  .claude/        (Claude Code)
-      asset.yaml         ──►  .cursor/rules/  (Cursor)
-      body.md            ──►  .windsurfrules  (Windsurf)
+  .coactl/rules/
+    my-rule/RULE.md      ──►  .claude/        (Claude Code)
+                         ──►  .agents/skills/ (Codex)
+                         ──►  .cursor/rules/  (Cursor)
+                         ──►  .windsurfrules  (Windsurf)
                          ──►  .github/        (Copilot)
 ```
 
@@ -70,7 +71,7 @@ coactl init
 coactl add --kind rule my-coding-standards
 
 # 3. Edit the body
-$EDITOR assets/my-coding-standards/body.md
+$EDITOR .coactl/rules/my-coding-standards/RULE.md
 
 # 4. Preview generated files (dry run)
 coactl build --target claude-code
@@ -86,7 +87,7 @@ coactl dashboard
 
 ## Global Setup
 
-Use `--global` to manage assets that apply across every project on your machine, not just the current directory. Global config lives at `~/.config/coactl/` and syncs to each tool's user-level config directory (`~/.claude/`, `~/.cursor/`, etc.).
+Use `--global` to manage assets that apply across every project on your machine, not just the current directory. Global config lives at `~/.config/coactl/` and syncs to each tool's user-level config directory (`~/.claude/`, `~/.agents/skills/`, `~/.cursor/`, etc.).
 
 ```bash
 # 1. Bootstrap the global config (one-time)
@@ -96,7 +97,7 @@ coactl init --global
 coactl add --kind rule my-standards --global
 
 # 3. Edit it
-$EDITOR ~/.config/coactl/assets/my-standards/body.md
+$EDITOR ~/.config/coactl/rules/my-standards/RULE.md
 
 # 4. Sync to all tools globally
 coactl sync --global
@@ -107,8 +108,8 @@ All commands support `--global`. Without it, commands read and write inside the 
 | Path | Purpose |
 |------|---------|
 | `~/.config/coactl/agent.manifest.yaml` | Global manifest (sources, overrides) |
-| `~/.config/coactl/assets/` | Global asset definitions |
-| `~/.claude/`, `~/.cursor/`, … | Tool-specific output (written by `sync --global`) |
+| `~/.config/coactl/{skills,commands,rules,workflows}/` | Global canonical asset definitions |
+| `~/.claude/`, `~/.agents/skills/`, `~/.codex/`, `~/.cursor/`, … | Tool-specific output (written by `sync --global`) |
 
 ---
 
@@ -127,24 +128,24 @@ Each asset has a `kind` that determines how adapters emit it:
 
 ### Tool compatibility matrix
 
-| Kind | Claude Code | Cursor | Windsurf | Copilot |
-|------|:-----------:|:------:|:--------:|:-------:|
-| `rule` | ✅ native | ✅ native | ✅ native | ✅ native |
-| `skill` | ✅ native | ⚠️ degraded | ⚠️ degraded | ⚠️ degraded |
-| `command` | ✅ native | ⚠️ degraded | ➖ skip | ➖ skip |
-| `workflow` | ✅ native | ➖ skip | ➖ skip | ➖ skip |
+| Kind | Claude Code | Codex | Cursor | Windsurf | Copilot |
+|------|:-----------:|:-----:|:------:|:--------:|:-------:|
+| `rule` | ✅ native | ✅ native | ✅ native | ✅ native | ✅ native |
+| `skill` | ✅ native | ✅ native | ⚠️ degraded | ⚠️ degraded | ⚠️ degraded |
+| `command` | ✅ native | ⚠️ global only | ⚠️ degraded | ➖ skip | ➖ skip |
+| `workflow` | ✅ native | ➖ skip | ➖ skip | ➖ skip | ➖ skip |
 
 ✅ native · ⚠️ best-effort with warning · ➖ skipped with notice
 
 ### Key files
 
 ```
-agent.manifest.yaml   ← sources, precedence, overrides (you edit this)
-agent.lock.yaml       ← integrity hashes           (auto-managed)
-assets/               ← your local assets           (you edit these)
-  <id>/
-    asset.yaml        ← metadata (kind, targets, activation, …)
-    body.md           ← the actual AI instructions
+.coactl/agent.manifest.yaml  ← sources, precedence, overrides (you edit this)
+.coactl/agent.lock.yaml      ← integrity hashes           (auto-managed)
+.coactl/skills/              ← skill definitions          (you edit these)
+.coactl/commands/            ← command definitions        (you edit these)
+.coactl/rules/               ← rule definitions           (you edit these)
+.coactl/workflows/           ← workflow definitions       (you edit these)
 ```
 
 ### agent.manifest.yaml
@@ -153,7 +154,7 @@ assets/               ← your local assets           (you edit these)
 sources:
   - name: local
     type: local
-    path: ./assets
+    path: .
 
   - name: team-shared          # optional remote source
     type: git
@@ -216,8 +217,12 @@ Write native files to disk for all configured tools.
 ```bash
 coactl sync                      # all targets, project scope
 coactl sync --target cursor      # one tool only
+coactl sync --target codex       # Codex skills and project AGENTS.md rules
 coactl sync --kind rule          # one kind only
 coactl sync --global             # write to ~/.claude/, ~/.cursor/, …
+coactl sync --global --strict    # fail if any mapping is degraded or skipped
+coactl sync --global --prune     # remove stale Coactl-managed output
+coactl sync --global --prune --dry-run  # preview writes and pruning
 ```
 
 ---
@@ -242,7 +247,7 @@ coactl import --from copilot --all
 coactl import my-skill --force     # overwrite existing asset
 ```
 
-Imported assets get a canonical `asset.yaml` (targeting all four tools) and a `body.md` with the original content. Run `coactl sync` after importing to generate native files for other tools.
+Imported assets get a canonical asset definition (targeting every compatible configured tool) and the original body. Run `coactl sync` after importing to generate native files for other tools.
 
 ---
 
@@ -374,7 +379,7 @@ sources:
 ```bash
 npm install          # install dependencies
 npm run build        # compile TypeScript → dist/
-npm test             # run test suite (134 tests)
+npm test             # run test suite
 npm run dev          # run CLI via tsx (no build step)
 npm run dashboard    # launch TUI directly
 ```

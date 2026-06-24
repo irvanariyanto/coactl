@@ -4,13 +4,14 @@ export interface ScaffoldOptions {
   id: string;
   kind: AssetKind;
   description?: string;
+  includeCodexCommand?: boolean;
 }
 
 function toTitleCase(id: string): string {
   return id.split("-").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
 }
 
-export function renderClaudeAssetFrontmatter({ id, kind, description }: ScaffoldOptions): string {
+export function renderClaudeAssetFrontmatter({ id, kind, description, includeCodexCommand = false }: ScaffoldOptions): string {
   const name = toTitleCase(id);
   // JSON.stringify gives a YAML-safe double-quoted scalar (same escaping rules) — used so
   // a real imported description with quotes/backslashes doesn't break the frontmatter.
@@ -29,6 +30,7 @@ export function renderClaudeAssetFrontmatter({ id, kind, description }: Scaffold
         '    pattern: "**/*.ts"',
         "targets:",
         "  - claude-code",
+        "  - codex",
         "  - cursor",
         "  - windsurf",
         "  - copilot",
@@ -46,6 +48,7 @@ export function renderClaudeAssetFrontmatter({ id, kind, description }: Scaffold
         "activation: manual",
         "targets:",
         "  - claude-code",
+        ...(includeCodexCommand ? ["  - codex"] : []),
         "  - cursor",
         "---",
         "",
@@ -60,6 +63,7 @@ export function renderClaudeAssetFrontmatter({ id, kind, description }: Scaffold
         "activation: auto",
         "targets:",
         "  - claude-code",
+        "  - codex",
         "  - cursor",
         "  - windsurf",
         "  - copilot",

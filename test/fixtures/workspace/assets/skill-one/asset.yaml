@@ -9,5 +9,6 @@ triggers:
     pattern: "**/*.ts"
 targets:
   - claude-code
+  - codex
   - cursor
 body: body.md

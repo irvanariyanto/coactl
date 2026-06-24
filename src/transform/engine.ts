@@ -1,10 +1,12 @@
-import type { Adapter } from "../adapters/types.js";
+import type { Adapter, AdapterContext } from "../adapters/types.js";
 import { ClaudeCodeAdapter } from "../adapters/claude-code.js";
+import { CodexAdapter } from "../adapters/codex.js";
 import { CursorAdapter } from "../adapters/cursor.js";
 import { WindsurfAdapter } from "../adapters/windsurf.js";
 import { CopilotAdapter } from "../adapters/copilot.js";
 import { capabilityFor } from "../adapters/capability-matrix.js";
-import { degradedWarning, skipNotice, type Diagnostic } from "./diagnostics.js";
+import { createDiagnostic, degradedWarning, skipNotice, type Diagnostic } from "./diagnostics.js";
+import { codexConfigDir } from "../io/global-paths.js";
 import type { Registry } from "../registry/types.js";
 import type { Manifest } from "../schema/index.js";
 import type { EmittedFile } from "../adapters/types.js";
@@ -18,6 +20,7 @@ export interface TransformResult {
 export interface TransformOptions {
   targets?: Target[];
   kinds?: AssetKind[];
+  scope?: AdapterContext["scope"];
 }
 
 // Adapter instances per target
@@ -25,6 +28,8 @@ function getAdapter(target: Target): Adapter {
   switch (target) {
     case "claude-code":
       return new ClaudeCodeAdapter();
+    case "codex":
+      return new CodexAdapter();
     case "cursor":
       return new CursorAdapter();
     case "windsurf":
@@ -41,6 +46,10 @@ export function transform(registry: Registry, manifest: Manifest, options: Trans
   const allAssets = registry.all();
   const filterKinds = options.kinds ? new Set(options.kinds) : null;
   const filterTargets = options.targets ? new Set(options.targets) : null;
+  const context: AdapterContext = {
+    scope: options.scope ?? "project",
+    ...(options.scope === "global" ? { codexHome: codexConfigDir() } : {}),
+  };
 
   for (const resolved of allAssets) {
     if (filterKinds && !filterKinds.has(resolved.asset.kind)) {
@@ -52,16 +61,34 @@ export function transform(registry: Registry, manifest: Manifest, options: Trans
         continue;
       }
 
-      const capability = capabilityFor(target, resolved.asset.kind);
+      const capability = capabilityFor(target, resolved.asset.kind, context.scope);
 
       if (capability === "skip") {
-        diagnostics.push(skipNotice(resolved.asset.id, target, resolved.asset.kind));
+        if (target === "codex" && resolved.asset.kind === "workflow") {
+          diagnostics.push(createDiagnostic(
+            "notice",
+            resolved.asset.id,
+            target,
+            resolved.asset.kind,
+            "workflow on codex is not supported — use a skill instead",
+          ));
+        } else if (target === "codex" && resolved.asset.kind === "command" && context.scope === "project") {
+          diagnostics.push(createDiagnostic(
+            "notice",
+            resolved.asset.id,
+            target,
+            resolved.asset.kind,
+            "command on codex is only available in global scope — skipped",
+          ));
+        } else {
+          diagnostics.push(skipNotice(resolved.asset.id, target, resolved.asset.kind));
+        }
         continue;
       }
 
       try {
         const adapter = getAdapter(target);
-        const emitted = adapter.emit(resolved);
+        const emitted = adapter.emit(resolved, context);
         files.push(...emitted);
 
         if (capability === "degraded") {

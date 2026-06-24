@@ -5,6 +5,10 @@ import { ASSET_KINDS, SUPPORTED_TARGETS } from "../../src/schema/index.js";
 import type { ResolvedAsset } from "../../src/registry/types.js";
 
 describe("CAPABILITY_MATRIX", () => {
+  it("keeps Claude Code as the first reference target", () => {
+    expect(SUPPORTED_TARGETS[0]).toBe("claude-code");
+  });
+
   it("covers every target and kind combination", () => {
     for (const target of SUPPORTED_TARGETS) {
       for (const kind of ASSET_KINDS) {
@@ -17,6 +21,13 @@ describe("CAPABILITY_MATRIX", () => {
     for (const kind of ASSET_KINDS) {
       expect(CAPABILITY_MATRIX["claude-code"][kind]).toBe("native");
     }
+  });
+
+  it("codex: skill/rule=native, command=degraded, workflow=skip", () => {
+    expect(CAPABILITY_MATRIX.codex.skill).toBe("native");
+    expect(CAPABILITY_MATRIX.codex.rule).toBe("native");
+    expect(CAPABILITY_MATRIX.codex.command).toBe("degraded");
+    expect(CAPABILITY_MATRIX.codex.workflow).toBe("skip");
   });
 
   it("cursor: skill=degraded, command=degraded, rule=native, workflow=skip", () => {
@@ -50,6 +61,11 @@ describe("capabilityFor", () => {
     for (const kind of ASSET_KINDS) {
       expect(capabilityFor("claude-code", kind)).toBe("native");
     }
+  });
+
+  it("skips Codex commands in project scope", () => {
+    expect(capabilityFor("codex", "command", "project")).toBe("skip");
+    expect(capabilityFor("codex", "command", "global")).toBe("degraded");
   });
 });
 

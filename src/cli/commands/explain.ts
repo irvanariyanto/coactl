@@ -5,13 +5,13 @@ import { transform } from "../../transform/engine.js";
 import { loadManifest } from "../../schema/load.js";
 import { capabilityFor } from "../../adapters/capability-matrix.js";
 import { createTable, printHeader } from "../../ui/output.js";
-import { resolveManifestPath } from "../../io/global-paths.js";
+import { resolveScope } from "../../io/global-paths.js";
 
 export async function explainAction(id: string, options: { json?: boolean; global?: boolean; project?: boolean }): Promise<void> {
   if (!options.json) printHeader(`explain ${id}`);
 
   try {
-    const manifestPath = resolveManifestPath(options);
+    const { path: manifestPath, scope } = resolveScope(options);
     const manifest = loadManifest(manifestPath);
     const loaders = buildSourceLoaders(manifestPath);
     const allLoaded = [];
@@ -33,21 +33,18 @@ export async function explainAction(id: string, options: { json?: boolean; globa
     }
 
     const rows = resolved.asset.targets.map((target) => {
-      const capability = capabilityFor(target, resolved.asset.kind);
+      const capability = capabilityFor(target, resolved.asset.kind, scope);
       let paths: string[] = [];
       let notes = "";
-      if (capability !== "skip") {
-        try {
-          const result = transform(registry, manifest, { targets: [target], kinds: [resolved.asset.kind] });
-          paths = result.files.filter((f) => f.assetId === id).map((f) => f.path);
-          notes = result.diagnostics
-            .filter((d) => d.assetId === id && d.target === target)
-            .map((d) => d.message)
-            .join("; ");
-        } catch { notes = "adapter error"; }
-      } else {
-        notes = "not supported — skipped";
-      }
+      try {
+        const result = transform(registry, manifest, { targets: [target], kinds: [resolved.asset.kind], scope });
+        paths = result.files.filter((f) => f.assetId === id).map((f) => f.path);
+        notes = result.diagnostics
+          .filter((d) => d.assetId === id && d.target === target)
+          .map((d) => d.message)
+          .join("; ");
+      } catch { notes = "adapter error"; }
+      if (!notes && capability === "skip") notes = "not supported — skipped";
       return { target, capability, paths, notes };
     });
 

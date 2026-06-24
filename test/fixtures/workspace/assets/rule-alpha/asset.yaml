@@ -6,6 +6,7 @@ description: A test rule fixture
 activation: auto
 targets:
   - claude-code
+  - codex
   - cursor
   - windsurf
   - copilot

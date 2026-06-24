@@ -26,6 +26,7 @@ describe("transform engine", () => {
 
     expect(result.files.length).toBeGreaterThan(0);
     expect(result.files.some((f) => f.path.includes(".claude/rules"))).toBe(true);
+    expect(result.files.some((f) => f.path === "AGENTS.md")).toBe(true);
     expect(result.files.some((f) => f.path.includes(".cursor"))).toBe(true);
   });
 
@@ -37,6 +38,7 @@ describe("transform engine", () => {
     const warnings = result.diagnostics.filter((d) => d.level === "warn");
     expect(warnings.length).toBeGreaterThan(0);
     expect(warnings.some((w) => w.target === "cursor")).toBe(true);
+    expect(result.files.some((f) => f.path.includes(".agents/skills"))).toBe(true);
   });
 
   it("filters by kind option", () => {
@@ -73,5 +75,34 @@ describe("transform engine", () => {
 
     expect(result.diagnostics.length).toBeGreaterThan(0);
     expect(result.diagnostics.every((d) => d.assetId === loaded[0].asset.id)).toBe(true);
+  });
+
+  it("uses Codex global paths and skips project-scoped commands", () => {
+    const previousCodexHome = process.env.CODEX_HOME;
+    process.env.CODEX_HOME = "/tmp/coactl-codex-home";
+    try {
+      const ruleLoaded = makeLoaded(FIXTURE_RULE_DIR);
+      const registry = resolveRegistry([ruleLoaded], MANIFEST);
+      const global = transform(registry, MANIFEST, { targets: ["codex"], scope: "global" });
+      expect(global.files[0].path).toBe("/tmp/coactl-codex-home/AGENTS.md");
+
+      const commandLoaded = {
+        ...makeLoaded(FIXTURE_SKILL_DIR),
+        asset: {
+          ...makeLoaded(FIXTURE_SKILL_DIR).asset,
+          kind: "command" as const,
+          activation: "manual" as const,
+          invocation: "/skill-one",
+          targets: ["codex" as const],
+        },
+      };
+      const commandRegistry = resolveRegistry([commandLoaded], MANIFEST);
+      const project = transform(commandRegistry, MANIFEST, { targets: ["codex"], scope: "project" });
+      expect(project.files).toEqual([]);
+      expect(project.diagnostics[0].message).toContain("only available in global scope");
+    } finally {
+      if (previousCodexHome === undefined) delete process.env.CODEX_HOME;
+      else process.env.CODEX_HOME = previousCodexHome;
+    }
   });
 });

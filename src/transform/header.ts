@@ -30,7 +30,9 @@ export function renderHeader(fields: HeaderFields): string {
 export function parseHeader(fileContents: string): { assetId: string; source: string; hash: string } | null {
   let headerText: string | null = null;
 
-  const htmlMatch = fileContents.match(/^<!--\n([\s\S]*?)-->\n/);
+  // Some native formats require YAML frontmatter before generated comments. Accept a
+  // Coactl header after that frontmatter while still requiring the exact header marker.
+  const htmlMatch = fileContents.match(/(?:^|\n)<!--\n([\s\S]*?)-->\n/);
   if (htmlMatch) {
     headerText = htmlMatch[1];
   } else {

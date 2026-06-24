@@ -65,7 +65,11 @@ export async function addAction(id: string, options: { kind?: string; force?: bo
   }
 
   mkdirSync(dir, { recursive: true });
-  writeFileSync(fullPath, renderClaudeAssetMd({ id, kind: kind as AssetKind }));
+  writeFileSync(fullPath, renderClaudeAssetMd({
+    id,
+    kind: kind as AssetKind,
+    includeCodexCommand: options.global,
+  }));
 
   try {
     const result = loadClaudeFormat(fullPath, id, kind as AssetKind);

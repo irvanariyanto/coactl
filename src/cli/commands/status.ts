@@ -27,7 +27,7 @@ export async function statusAction(options: { json?: boolean; global?: boolean; 
     }
 
     const registry = resolveRegistry(allLoaded, manifest);
-    const { files, diagnostics } = transform(registry, manifest);
+    const { files, diagnostics } = transform(registry, manifest, { scope });
     const drift = checkDrift(files, rootDir);
     spinner.stop();
 

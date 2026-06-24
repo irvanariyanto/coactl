@@ -5,13 +5,14 @@ import { buildSourceLoaders } from "../../sources/registry-of-sources.js";
 import { resolveRegistry } from "../../registry/resolve.js";
 import { transform } from "../../transform/engine.js";
 import { loadManifest } from "../../schema/load.js";
-import { writeFiles } from "../../io/write-files.js";
+import { pruneManagedOutputs, writeFiles } from "../../io/write-files.js";
 import { globalRootDir, resolveScope } from "../../io/global-paths.js";
 import { createSpinner, printHeader } from "../../ui/output.js";
 import { SUPPORTED_TARGETS, type AssetKind, type Target } from "../../schema/index.js";
 
 const TARGET_HINTS: Record<Target, string> = {
   "claude-code": ".claude/  (skills, commands, rules)",
+  "codex": ".agents/skills/, AGENTS.md, ~/.codex/prompts/",
   "cursor": ".cursor/rules/  (.mdc files)",
   "windsurf": ".windsurfrules  (managed blocks)",
   "copilot": ".github/copilot-instructions.md  (managed blocks)",
@@ -22,6 +23,9 @@ export async function syncAction(options: {
   project?: boolean;
   kind?: string;
   target?: string;
+  strict?: boolean;
+  prune?: boolean;
+  dryRun?: boolean;
 }): Promise<void> {
   printHeader("sync");
 
@@ -95,18 +99,35 @@ export async function syncAction(options: {
     const result = transform(registry, manifest, {
       targets: selectedTargets,
       kinds: options.kind ? ([options.kind as AssetKind] as const) : undefined,
+      scope,
     });
 
     spinner.stop();
 
-    if (result.files.length === 0) {
+    if (result.files.length === 0 && !options.prune) {
+      if (result.diagnostics.length > 0) {
+        p.log.message(`${result.diagnostics.length} diagnostic(s):`);
+        for (const diag of result.diagnostics) {
+          const icon = diag.level === "warn" ? "⚠" : "ℹ";
+          console.log(`${icon} ${chalk.yellow(diag.assetId)}: ${diag.message}`);
+        }
+      }
+      if (options.strict && result.diagnostics.length > 0) {
+        p.log.error("Strict sync failed: one or more selected assets are degraded or unsupported.");
+        process.exitCode = 1;
+      }
       p.log.warn("No files to write.");
       return;
     }
 
-    const writeSpinner = createSpinner(`Writing ${result.files.length} file(s)...`).start();
-    const summary = writeFiles(result.files, rootDir);
-    writeSpinner.stop();
+    const summary = options.dryRun
+      ? { written: 0, unchanged: 0, errors: [] as Array<{ path: string; error: string }> }
+      : (() => {
+          const writeSpinner = createSpinner(`Writing ${result.files.length} file(s)...`).start();
+          const writeSummary = writeFiles(result.files, rootDir);
+          writeSpinner.stop();
+          return writeSummary;
+        })();
 
     // Group output by target
     const byTarget = new Map<string, typeof result.files>();
@@ -123,7 +144,9 @@ export async function syncAction(options: {
     }
     console.log();
 
-    if (summary.written > 0) {
+    if (options.dryRun && result.files.length > 0) {
+      p.log.message(`Dry run: ${result.files.length} file(s) would be written or updated`);
+    } else if (summary.written > 0) {
       p.log.success(`${chalk.green(summary.written)} file(s) written`);
     }
     if (summary.unchanged > 0) {
@@ -138,12 +161,39 @@ export async function syncAction(options: {
       }
     }
 
-    if (summary.errors.length > 0) {
-      p.log.error(`${summary.errors.length} error(s):`);
-      for (const err of summary.errors) {
+    let pruneErrors: Array<{ path: string; error: string }> = [];
+    if (options.prune) {
+      // Pruning must consider every kind for the selected targets. Otherwise a filtered
+      // sync such as `--kind rule --prune` would delete valid command or skill output.
+      const expectedFiles = options.kind
+        ? transform(registry, manifest, { targets: selectedTargets, scope }).files
+        : result.files;
+      const pruneSummary = pruneManagedOutputs(expectedFiles, {
+        rootDir,
+        scope,
+        targets: selectedTargets ?? [...SUPPORTED_TARGETS],
+        dryRun: options.dryRun,
+      });
+      pruneErrors = pruneSummary.errors;
+      if (pruneSummary.pruned.length > 0) {
+        const action = options.dryRun ? "would prune" : "pruned";
+        p.log.message(`${action} ${pruneSummary.pruned.length} stale Coactl-managed output(s)`);
+        for (const path of pruneSummary.pruned) console.log(`    ${chalk.dim(path)}`);
+      }
+    }
+
+    const errors = [...summary.errors, ...pruneErrors];
+    if (errors.length > 0) {
+      p.log.error(`${errors.length} error(s):`);
+      for (const err of errors) {
         console.log(`  ${chalk.red(err.path)}: ${err.error}`);
       }
       process.exitCode = 1;
+    } else if (options.strict && result.diagnostics.length > 0) {
+      p.log.error("Strict sync failed: one or more selected assets are degraded or unsupported.");
+      process.exitCode = 1;
+    } else if (options.dryRun) {
+      p.outro(chalk.dim("Dry run completed."));
     } else {
       p.outro(chalk.green("Sync completed."));
     }

@@ -1,4 +1,5 @@
 import { stringify } from "yaml";
+import { contentHash, renderHeader } from "../transform/header.js";
 import { capabilityFor } from "./capability-matrix.js";
 import type { Adapter, EmittedFile } from "./types.js";
 import type { ResolvedAsset } from "../registry/types.js";
@@ -30,7 +31,13 @@ export class ClaudeCodeAdapter implements Adapter {
 
   emit(asset: ResolvedAsset): EmittedFile[] {
     const id = asset.asset.id;
-    const contents = renderFrontmatter(asset.asset) + asset.bodyText;
+    const header = renderHeader({
+      assetId: id,
+      source: asset.sourceName,
+      hash: contentHash(asset.bodyText),
+      commentSyntax: "<!-- -->",
+    });
+    const contents = renderFrontmatter(asset.asset) + header + asset.bodyText;
 
     switch (asset.asset.kind) {
       case "skill":

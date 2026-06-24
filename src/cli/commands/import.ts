@@ -94,10 +94,9 @@ export function listAssets(tool: ToolSource, global?: boolean): ImportedAsset[] 
         const file = join(dir, "SKILL.md");
         if (!existsSync(dir) || !statSync(dir).isDirectory() || !existsSync(file)) continue;
         const raw = readFileSync(file, "utf-8");
-        // Claude Code skills always use YAML frontmatter (never the HTML-comment header
-        // used by windsurf/cursor/copilot) — parseHeader/stripCoactlHeader never match
-        // here, so the frontmatter was never stripped and ended up duplicated in the body.
-        assets.push({ id: name, kind: "skill", body: stripYamlFrontmatter(raw), description: extractDescription(raw) });
+        // Coactl-generated Claude files place their drift header after frontmatter.
+        // Strip both layers so re-importing a generated asset preserves only its body.
+        assets.push({ id: name, kind: "skill", body: stripCoactlHeader(stripYamlFrontmatter(raw)), description: extractDescription(raw) });
       }
     }
 
@@ -109,7 +108,7 @@ export function listAssets(tool: ToolSource, global?: boolean): ImportedAsset[] 
         if (!file.endsWith(".md")) continue;
         const raw = readFileSync(join(commandsDir, file), "utf-8");
         const kind: AssetKind = isWorkflowFrontmatter(raw) ? "workflow" : "command";
-        assets.push({ id: basename(file, ".md"), kind, body: stripYamlFrontmatter(raw), description: extractDescription(raw) });
+        assets.push({ id: basename(file, ".md"), kind, body: stripCoactlHeader(stripYamlFrontmatter(raw)), description: extractDescription(raw) });
       }
     }
 
@@ -118,7 +117,7 @@ export function listAssets(tool: ToolSource, global?: boolean): ImportedAsset[] 
       for (const file of readdirSync(rulesDir)) {
         if (!file.endsWith(".md")) continue;
         const raw = readFileSync(join(rulesDir, file), "utf-8");
-        assets.push({ id: basename(file, ".md"), kind: "rule", body: stripYamlFrontmatter(raw), description: extractDescription(raw) });
+        assets.push({ id: basename(file, ".md"), kind: "rule", body: stripCoactlHeader(stripYamlFrontmatter(raw)), description: extractDescription(raw) });
       }
     }
 
@@ -158,7 +157,7 @@ export function assetPath(kind: AssetKind, id: string, root: string): { dir: str
   }
 }
 
-function writeAsset(asset: ImportedAsset, root: string, force?: boolean): boolean {
+function writeAsset(asset: ImportedAsset, root: string, force?: boolean, includeCodexCommand = false): boolean {
   const { dir, file } = assetPath(asset.kind, asset.id, root);
   const fullPath = join(dir, file);
 
@@ -168,7 +167,12 @@ function writeAsset(asset: ImportedAsset, root: string, force?: boolean): boolea
   }
 
   mkdirSync(dir, { recursive: true });
-  const frontmatter = renderClaudeAssetFrontmatter({ id: asset.id, kind: asset.kind, description: asset.description });
+  const frontmatter = renderClaudeAssetFrontmatter({
+    id: asset.id,
+    kind: asset.kind,
+    description: asset.description,
+    includeCodexCommand,
+  });
   writeFileSync(fullPath, frontmatter + asset.body);
   p.log.success(`Imported ${chalk.bold(asset.id)} (${asset.kind}) → ${fullPath}`);
   return true;
@@ -218,7 +222,7 @@ export async function importAction(
     }
     let count = 0;
     for (const asset of assets) {
-      if (writeAsset(asset, root, options.force)) count++;
+      if (writeAsset(asset, root, options.force, options.global)) count++;
     }
     p.outro(chalk.green(`Imported ${count}/${assets.length} asset(s). Run ${chalk.bold("coactl sync")} to generate files for other tools.`));
     return;
@@ -231,7 +235,7 @@ export async function importAction(
       process.exitCode = 1;
       return;
     }
-    const ok = writeAsset(asset, root, options.force);
+    const ok = writeAsset(asset, root, options.force, options.global);
     if (ok) {
       p.outro(chalk.green(`Done. Run ${chalk.bold("coactl sync")} to generate files for other tools.`));
     } else {
@@ -263,7 +267,7 @@ export async function importAction(
   const toImport = assets.filter((a) => selected.includes(a.id));
   let count = 0;
   for (const asset of toImport) {
-    if (writeAsset(asset, root, options.force)) count++;
+    if (writeAsset(asset, root, options.force, options.global)) count++;
   }
   p.outro(chalk.green(`Imported ${count}/${toImport.length} asset(s). Run ${chalk.bold("coactl sync")} to generate files for other tools.`));
 }

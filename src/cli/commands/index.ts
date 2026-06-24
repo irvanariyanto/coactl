@@ -96,11 +96,14 @@ export const commandSpecs: CommandSpec[] = [
   },
   {
     name: "sync",
-    description: "Write native config files for all configured AI tools (claude-code, cursor, windsurf, copilot)",
+    description: "Write native config files for all configured AI tools (claude-code, codex, cursor, windsurf, copilot)",
     configure: (cmd) => {
       addManifestScopeOptions(cmd, "sync global scope")
-        .option("--target <tool>", "limit sync to one target: claude-code|cursor|windsurf|copilot")
+        .option("--target <tool>", "limit sync to one target: claude-code|codex|cursor|windsurf|copilot")
         .option("--kind <kind>", "limit sync to one kind: skill|command|rule|workflow")
+        .option("--strict", "fail when any selected asset is degraded or unsupported")
+        .option("--prune", "remove stale Coactl-managed output for selected targets")
+        .option("--dry-run", "preview writes and pruning without changing files")
         .action(syncAction);
     },
   },

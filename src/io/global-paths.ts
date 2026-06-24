@@ -21,6 +21,10 @@ export function globalAssetsDir(): string {
   return join(globalConfigDir(), "assets");
 }
 
+export function codexConfigDir(): string {
+  return resolve(process.env.CODEX_HOME || join(homedir(), ".codex"));
+}
+
 export interface ManifestScopeOptions {
   global?: boolean;
   project?: boolean;
@@ -75,6 +79,7 @@ export function globalBasePath(target: Target): string {
   const home = homedir();
   switch (target) {
     case "claude-code": return join(home, ".claude");
+    case "codex": return codexConfigDir();
     case "cursor": return join(home, ".cursor");
     case "windsurf": return home;
     case "copilot": return join(home, ".github");
