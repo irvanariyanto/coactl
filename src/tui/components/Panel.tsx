@@ -15,7 +15,7 @@ interface PanelProps {
 }
 
 export function Panel({ title, active = false, children, width, height, grow = 0 }: PanelProps) {
-  const borderColor = active ? "cyan" : "gray";
+  const borderColor = active ? "magenta" : "gray";
   return (
     <Box
       flexDirection="column"
@@ -28,7 +28,7 @@ export function Panel({ title, active = false, children, width, height, grow = 0
       overflow="hidden"
     >
       <Box paddingX={1}>
-        <Text bold color={active ? "cyan" : "white"}>
+        <Text bold color={active ? "magenta" : "white"}>
           {title}
         </Text>
       </Box>

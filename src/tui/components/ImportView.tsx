@@ -5,6 +5,7 @@ import { sourceHint } from "../../cli/commands/import.js";
 
 const TOOLS = [
   { value: "claude-code" as const, label: "Claude Code" },
+  { value: "codex" as const, label: "Codex" },
   { value: "cursor" as const, label: "Cursor" },
   { value: "windsurf" as const, label: "Windsurf" },
   { value: "copilot" as const, label: "Copilot" },
@@ -85,9 +86,12 @@ export function ImportView({ onCancel, onListAssets, onImport, rows, columns, gl
           prev.size === step.assets.length ? new Set() : new Set(step.assets.map((a) => a.id)),
         );
       }
-      if (key.return && selected.size > 0) {
+      if (key.return && step.assets.length > 0) {
+        const highlighted = step.assets[assetIndex]?.id;
+        const ids = selected.size > 0 ? [...selected] : highlighted ? [highlighted] : [];
+        if (ids.length === 0) return;
         setStep({ kind: "importing" });
-        onImport(step.tool, [...selected])
+        onImport(step.tool, ids)
           .then((r) => setStep({ kind: "done", imported: r.imported, errors: r.errors }))
           .catch((err: Error) => setStep({ kind: "error", message: err.message }));
       }
@@ -120,7 +124,7 @@ export function ImportView({ onCancel, onListAssets, onImport, rows, columns, gl
           <Box flexDirection="column" gap={1}>
             <Text dimColor>
               {step.assets.length} asset{step.assets.length !== 1 ? "s" : ""} in {step.tool}
-              {"  "}[j/k] nav  [Space] toggle  [a] all  [Enter] import ({selected.size} selected)  [q] back
+              {"  "}[j/k] nav  [Space] toggle  [a] all  [Enter] import selected/current ({selected.size} selected)  [q] back
             </Text>
             {step.assets.length === 0 && <Text dimColor>No importable assets found.</Text>}
             {step.assets.map((a, i) => (

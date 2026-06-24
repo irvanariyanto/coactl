@@ -1,46 +1,274 @@
 import { withFullScreen } from "fullscreen-ink";
 import chalk from "chalk";
-import { existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { constants, accessSync, existsSync, readFileSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Dashboard, type DashboardData, type DashboardAsset, type SyncResult, type DashboardProps } from "../../tui/views/Dashboard.js";
+import { Dashboard, type DashboardData, type DashboardAsset, type DashboardScopeFilter, type SyncResult, type DashboardProps, type DashboardOutput, type DashboardTool, type DashboardWorkspace, type DashboardActivity, type DashboardConflict, type PreviewAction } from "../../tui/views/Dashboard.js";
 import { loadManifest } from "../../schema/load.js";
 import { buildSourceLoaders } from "../../sources/registry-of-sources.js";
 import { resolveRegistry } from "../../registry/resolve.js";
 import { transform } from "../../transform/engine.js";
 import { checkDrift } from "../../registry/drift.js";
 import { writeFiles } from "../../io/write-files.js";
-import { globalManifestPath, globalRootDir, globalConfigDir, findProjectManifest, lockfilePathForManifest } from "../../io/global-paths.js";
+import { capabilityFor } from "../../adapters/capability-matrix.js";
+import { globalManifestPath, globalRootDir, globalConfigDir, findProjectManifest, lockfilePathForManifest, globalBasePath, codexConfigDir } from "../../io/global-paths.js";
 import { computeIntegrity } from "../../registry/integrity.js";
 import { readLockfile, writeLockfile, upsertLockEntry } from "../../registry/lockfile.js";
 import type { StatusKind } from "../../tui/components/StatusBadge.js";
 import { listAssets, assetPath, type ToolSource } from "./import.js";
 import { renderClaudeAssetFrontmatter } from "../../scaffold/templates.js";
 import type { ImportTool, ImportCandidate } from "../../tui/components/ImportView.js";
+import { SUPPORTED_TARGETS, type Target } from "../../schema/index.js";
+import type { SourceConfig } from "../../schema/manifest.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+type ScopeData = Pick<DashboardData, "assets" | "sources" | "conflicts" | "outputs" | "tools" | "workspaces" | "activity">;
+
+const TARGET_LABEL: Record<Target, string> = {
+  "claude-code": "Claude Code",
+  codex: "Codex",
+  cursor: "Cursor",
+  windsurf: "Windsurf",
+  copilot: "GitHub Copilot",
+};
+
+function nowLabel(): string {
+  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function sourcePathFor(manifestPath: string, source: SourceConfig): string {
+  if (source.type === "local") {
+    return isAbsolute(source.path) ? source.path : resolve(dirname(manifestPath), source.path);
+  }
+  if (source.type === "git") {
+    return `${source.url}${source.ref ? `#${source.ref}` : ""}${source.subdir ? `/${source.subdir}` : ""}`;
+  }
+  if (source.type === "package") return `${source.registry}:${source.install}`;
+  if (source.type === "url") return source.url;
+  return source.org;
+}
+
+function workspaceWritable(rootDir: string): boolean {
+  try {
+    accessSync(rootDir, constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function targetBasePath(target: Target, scope: "global" | "project", rootDir: string): string {
+  if (scope === "global") {
+    if (target === "codex") return `${join(homedir(), ".agents")} + ${codexConfigDir()}`;
+    return globalBasePath(target);
+  }
+  switch (target) {
+    case "claude-code": return join(rootDir, ".claude");
+    case "codex": return rootDir;
+    case "cursor": return join(rootDir, ".cursor");
+    case "windsurf": return join(rootDir, ".windsurfrules");
+    case "copilot": return join(rootDir, ".github");
+  }
+}
+
+function previewAction(status: "clean" | "modified" | "stale" | "missing" | undefined): PreviewAction {
+  if (status === "missing") return "create";
+  if (status === "stale") return "update";
+  if (status === "modified") return "conflict";
+  return "skip";
+}
+
+function previewReason(action: PreviewAction): string {
+  switch (action) {
+    case "create": return "Target file does not exist yet.";
+    case "update": return "Target file is managed by coactl but has older generated content.";
+    case "conflict": return "Target file appears manually modified or has an invalid managed header.";
+    case "delete": return "Target file is no longer produced by the registry.";
+    case "skip": return "Target file already matches the generated output.";
+  }
+}
+
+function emptyScopeData(
+  scope: "global" | "project",
+  rootDir: string,
+  manifestPath: string,
+  message: string,
+): ScopeData {
+  return {
+    assets: [],
+    sources: [],
+    conflicts: [],
+    outputs: [],
+    tools: buildTools([], scope, rootDir),
+    workspaces: [buildWorkspace(scope, rootDir, manifestPath, false, 0, 0)],
+    activity: [{
+      level: "warning",
+      message,
+      detail: `Expected manifest: ${manifestPath}`,
+      scope,
+      time: nowLabel(),
+    }],
+  };
+}
+
+function buildWorkspace(
+  scope: "global" | "project",
+  rootDir: string,
+  manifestPath: string,
+  manifestExists: boolean,
+  assetCount: number,
+  sourceCount: number,
+): DashboardWorkspace {
+  return {
+    scope,
+    root: rootDir,
+    manifestPath,
+    manifestExists,
+    assetCount,
+    sourceCount,
+    writable: workspaceWritable(rootDir),
+  };
+}
+
+function buildTools(assets: DashboardAsset[], scope: "global" | "project", rootDir: string): DashboardTool[] {
+  return SUPPORTED_TARGETS.map((target) => {
+    const targeted = assets.filter((asset) => asset.targets.includes(target));
+    let nativeCount = 0;
+    let degradedCount = 0;
+    let skippedCount = 0;
+    for (const asset of targeted) {
+      const capability = capabilityFor(target, asset.kind, scope);
+      if (capability === "native") nativeCount++;
+      else if (capability === "degraded") degradedCount++;
+      else skippedCount++;
+    }
+    return {
+      id: target,
+      label: TARGET_LABEL[target],
+      state: targeted.length > 0 ? "configured" : "available",
+      targetPath: targetBasePath(target, scope, rootDir),
+      assetCount: targeted.length,
+      nativeCount,
+      degradedCount,
+      skippedCount,
+      scopes: [scope],
+      note: targeted.length > 0
+        ? "This tool is referenced by one or more asset targets."
+        : "Add this target to an asset to start syncing generated files for it.",
+    };
+  });
+}
+
+function mergeTools(globalTools: DashboardTool[], projectTools: DashboardTool[] = []): DashboardTool[] {
+  return SUPPORTED_TARGETS.map((target) => {
+    const matches = [...globalTools, ...projectTools].filter((tool) => tool.id === target);
+    const first = matches[0]!;
+    const scopes = matches.flatMap((tool) => tool.scopes);
+    const assetCount = matches.reduce((sum, tool) => sum + tool.assetCount, 0);
+    return {
+      ...first,
+      state: assetCount > 0 ? "configured" : "available",
+      targetPath: matches.map((tool) => `${tool.scopes[0]}:${tool.targetPath}`).join(" | "),
+      assetCount,
+      nativeCount: matches.reduce((sum, tool) => sum + tool.nativeCount, 0),
+      degradedCount: matches.reduce((sum, tool) => sum + tool.degradedCount, 0),
+      skippedCount: matches.reduce((sum, tool) => sum + tool.skippedCount, 0),
+      scopes: [...new Set(scopes)],
+    };
+  });
+}
 
 async function loadScopeData(
   manifestPath: string,
   assetScope: "global" | "project",
   rootDir: string,
-): Promise<Pick<DashboardData, "assets" | "sources" | "conflicts">> {
+): Promise<ScopeData> {
+  if (!existsSync(manifestPath)) {
+    return emptyScopeData(
+      assetScope,
+      rootDir,
+      manifestPath,
+      assetScope === "global"
+        ? "Global config is not initialized yet."
+        : "Project config is not initialized yet.",
+    );
+  }
+
   const manifest = loadManifest(manifestPath);
   const loaders = buildSourceLoaders(manifestPath);
   const allLoaded = [];
   const sourceAssetCounts = new Map<string, number>();
+  const activity: DashboardActivity[] = [];
 
-  for (const loader of loaders) {
-    const result = await loader.load();
-    allLoaded.push(...result.assets);
-    for (const a of result.assets) {
-      sourceAssetCounts.set(a.sourceName, (sourceAssetCounts.get(a.sourceName) ?? 0) + 1);
+  for (const [index, loader] of loaders.entries()) {
+    const sourceName = manifest.sources[index]?.name ?? `source-${index + 1}`;
+    try {
+      const result = await loader.load();
+      allLoaded.push(...result.assets);
+      for (const a of result.assets) {
+        sourceAssetCounts.set(a.sourceName, (sourceAssetCounts.get(a.sourceName) ?? 0) + 1);
+      }
+      activity.push({
+        level: "success",
+        message: `Loaded ${result.assets.length} asset${result.assets.length === 1 ? "" : "s"} from ${sourceName}.`,
+        scope: assetScope,
+        time: nowLabel(),
+      });
+      for (const sourceError of result.errors) {
+        activity.push({
+          level: "warning",
+          message: `Skipped an invalid asset from ${sourceName}.`,
+          detail: `${sourceError.dir}: ${sourceError.error.message}`,
+          scope: assetScope,
+          time: nowLabel(),
+        });
+      }
+    } catch (err) {
+      activity.push({
+        level: "error",
+        message: `Could not load source ${sourceName}.`,
+        detail: (err as Error).message,
+        scope: assetScope,
+        time: nowLabel(),
+      });
     }
   }
 
   const registry = resolveRegistry(allLoaded, manifest);
-  const { files: emittedFiles } = transform(registry, manifest, { scope: assetScope });
+  const { files: emittedFiles, diagnostics } = transform(registry, manifest, { scope: assetScope });
   const driftEntries = checkDrift(emittedFiles, rootDir);
+  const outputs: DashboardOutput[] = emittedFiles.map((file) => {
+    const drift = driftEntries.find((entry) => entry.assetId === file.assetId && entry.path === file.path);
+    const action = previewAction(drift?.status);
+    return {
+      path: file.path,
+      target: file.target,
+      assetId: file.assetId,
+      scope: assetScope,
+      action,
+      reason: previewReason(action),
+    };
+  });
+  const outputsByAsset = new Map<string, DashboardOutput[]>();
+  for (const output of outputs) {
+    outputsByAsset.set(output.assetId, [...(outputsByAsset.get(output.assetId) ?? []), output]);
+  }
+  const diagnosticsByAsset = new Map<string, string[]>();
+  for (const diagnostic of diagnostics) {
+    diagnosticsByAsset.set(diagnostic.assetId, [
+      ...(diagnosticsByAsset.get(diagnostic.assetId) ?? []),
+      `${diagnostic.level}: ${diagnostic.message}`,
+    ]);
+    activity.push({
+      level: diagnostic.level === "warn" ? "warning" : "info",
+      message: diagnostic.message,
+      detail: `${diagnostic.assetId} -> ${diagnostic.target}`,
+      scope: assetScope,
+      time: nowLabel(),
+    });
+  }
 
   const assets: DashboardAsset[] = registry.all().map((ra) => {
     const assetDrift = driftEntries.filter((d) => d.assetId === ra.asset.id);
@@ -55,6 +283,12 @@ async function loadScopeData(
     } else {
       status = "synced";
     }
+    let modifiedAt: string | undefined;
+    try {
+      modifiedAt = statSync(ra.origin.dir).mtime.toLocaleString();
+    } catch {
+      modifiedAt = undefined;
+    }
     return {
       id: ra.asset.id,
       kind: ra.asset.kind,
@@ -65,6 +299,10 @@ async function loadScopeData(
       source: ra.sourceName,
       readOnly: ra.readOnly,
       scope: assetScope,
+      sourcePath: ra.origin.dir,
+      modifiedAt,
+      outputs: outputsByAsset.get(ra.asset.id) ?? [],
+      diagnostics: diagnosticsByAsset.get(ra.asset.id) ?? [],
     };
   });
 
@@ -73,9 +311,24 @@ async function loadScopeData(
     type: s.type,
     count: sourceAssetCounts.get(s.name) ?? 0,
     scope: assetScope,
+    path: sourcePathFor(manifestPath, s),
   }));
 
-  return { assets, sources, conflicts: registry.conflicts };
+  const conflicts: DashboardConflict[] = registry.conflicts.map((conflict) => ({
+    ...conflict,
+    scope: assetScope,
+    winner: registry.get(conflict.id)?.sourceName,
+  }));
+
+  return {
+    assets,
+    sources,
+    conflicts,
+    outputs,
+    tools: buildTools(assets, assetScope, rootDir),
+    workspaces: [buildWorkspace(assetScope, rootDir, manifestPath, true, assets.length, manifest.sources.length)],
+    activity,
+  };
 }
 
 async function syncScope(
@@ -134,14 +387,20 @@ async function updateScope(manifestPath: string): Promise<{ updated: number; err
 }
 
 function mergeData(
-  globalData: Pick<DashboardData, "assets" | "sources" | "conflicts">,
-  projectData: Pick<DashboardData, "assets" | "sources" | "conflicts"> | null,
+  globalData: ScopeData,
+  projectData: ScopeData | null,
   scope: DashboardData["scope"],
 ): DashboardData {
+  const globalTools = globalData.tools ?? [];
+  const projectTools = projectData?.tools ?? [];
   return {
     assets: [...(projectData?.assets ?? []), ...globalData.assets],
     sources: [...(projectData?.sources ?? []), ...globalData.sources],
     conflicts: [...(projectData?.conflicts ?? []), ...globalData.conflicts],
+    outputs: [...(projectData?.outputs ?? []), ...(globalData.outputs ?? [])],
+    tools: scope === "project+global" ? mergeTools(globalTools, projectTools) : globalTools,
+    workspaces: [...(projectData?.workspaces ?? []), ...(globalData.workspaces ?? [])],
+    activity: [...(projectData?.activity ?? []), ...(globalData.activity ?? [])],
     scope,
   };
 }
@@ -162,36 +421,30 @@ export async function buildDashboardProps(options: { global?: boolean; project?:
   const dataScope: DashboardData["scope"] = isProject ? "project+global" : "global";
 
   const [globalData, projectData] = await Promise.all([
-    loadScopeData(globalPath, "global", globalRoot).catch(() => ({
-      assets: [] as DashboardAsset[],
-      sources: [],
-      conflicts: [],
-    })),
+    loadScopeData(globalPath, "global", globalRoot),
     isProject
       ? loadScopeData(projectManifestFound!, "project", projectRoot!)
       : Promise.resolve(null),
   ]);
   const data = mergeData(globalData, projectData, dataScope);
 
-  const onSync = async (): Promise<SyncResult> => {
+  const onSync = async (scope: DashboardScopeFilter): Promise<SyncResult> => {
     const [globalResult, projectResult] = await Promise.all([
-      syncScope(globalPath, globalRoot, "global"),
-      isProject ? syncScope(projectManifestFound!, projectRoot!, "project") : Promise.resolve(null),
+      scope !== "project" ? syncScope(globalPath, globalRoot, "global") : Promise.resolve(null),
+      isProject && scope !== "global"
+        ? syncScope(projectManifestFound!, projectRoot!, "project")
+        : Promise.resolve(null),
     ]);
     return {
-      written: globalResult.written + (projectResult?.written ?? 0),
-      unchanged: globalResult.unchanged + (projectResult?.unchanged ?? 0),
-      errors: [...globalResult.errors, ...(projectResult?.errors ?? [])],
+      written: (globalResult?.written ?? 0) + (projectResult?.written ?? 0),
+      unchanged: (globalResult?.unchanged ?? 0) + (projectResult?.unchanged ?? 0),
+      errors: [...(globalResult?.errors ?? []), ...(projectResult?.errors ?? [])],
     };
   };
 
   const onRefresh = async (): Promise<DashboardData> => {
     const [globalData, projectData] = await Promise.all([
-      loadScopeData(globalPath, "global", globalRoot).catch(() => ({
-        assets: [] as DashboardAsset[],
-        sources: [],
-        conflicts: [],
-      })),
+      loadScopeData(globalPath, "global", globalRoot),
       isProject
         ? loadScopeData(projectManifestFound!, "project", projectRoot!)
         : Promise.resolve(null),

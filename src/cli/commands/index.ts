@@ -12,6 +12,7 @@ import { whyAction } from "./why.js";
 import { explainAction } from "./explain.js";
 
 import { importAction } from "./import.js";
+import { enableCodexAction } from "./enable-codex.js";
 
 export interface CommandSpec {
   name: string;
@@ -29,12 +30,19 @@ function addManifestScopeOptions(cmd: Command, globalDescription: string): Comma
 
 export const commandSpecs: CommandSpec[] = [
   {
+    name: "enable-codex",
+    description: "Add Codex to compatible local asset targets in the active manifest scope",
+    configure: (cmd) => {
+      addManifestScopeOptions(cmd, "use global manifest").action(enableCodexAction);
+    },
+  },
+  {
     name: "import",
     description: "Import assets from an existing AI tool into coactl",
     configure: (cmd) => {
       cmd
         .argument("[id]", "asset id to import")
-        .option("--from <tool>", "source tool: claude-code|cursor|windsurf|copilot (default: claude-code)")
+        .option("--from <tool>", "source tool: claude-code|codex|cursor|windsurf|copilot (default: claude-code)")
         .option("--all", "import all assets from the source")
         .option("--global", "import from/to global scope")
         .option("--force", "overwrite existing assets")

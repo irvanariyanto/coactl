@@ -1,12 +1,12 @@
 import chalk from "chalk";
 
 export const colors = {
-  brand: chalk.cyan,
+  brand: chalk.magenta,
   success: chalk.green,
   warning: chalk.yellow,
   error: chalk.red,
   muted: chalk.gray,
-  accent: chalk.magenta,
+  accent: chalk.cyan,
   heading: chalk.bold.white,
 } as const;
 

@@ -12,7 +12,7 @@ import { SUPPORTED_TARGETS, type AssetKind, type Target } from "../../schema/ind
 
 const TARGET_HINTS: Record<Target, string> = {
   "claude-code": ".claude/  (skills, commands, rules)",
-  "codex": ".agents/skills/, AGENTS.md, ~/.codex/prompts/",
+  "codex": ".agents/skills/, AGENTS.md, CODEX_HOME/prompts/",
   "cursor": ".cursor/rules/  (.mdc files)",
   "windsurf": ".windsurfrules  (managed blocks)",
   "copilot": ".github/copilot-instructions.md  (managed blocks)",

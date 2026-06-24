@@ -4,12 +4,12 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { basename, join } from "node:path";
 import { homedir } from "node:os";
 import { renderClaudeAssetFrontmatter } from "../../scaffold/templates.js";
-import { globalConfigDir } from "../../io/global-paths.js";
+import { codexConfigDir, globalConfigDir } from "../../io/global-paths.js";
 import { BRAND } from "../../tui/theme.js";
 import type { AssetKind } from "../../schema/index.js";
 
-export type ToolSource = "claude-code" | "cursor" | "windsurf" | "copilot";
-const VALID_SOURCES: ToolSource[] = ["claude-code", "cursor", "windsurf", "copilot"];
+export type ToolSource = "claude-code" | "codex" | "cursor" | "windsurf" | "copilot";
+const VALID_SOURCES: ToolSource[] = ["claude-code", "codex", "cursor", "windsurf", "copilot"];
 
 export interface ImportedAsset {
   id: string;
@@ -22,6 +22,7 @@ function sourcePath(tool: ToolSource, global?: boolean): string {
   const base = global ? homedir() : process.cwd();
   switch (tool) {
     case "claude-code": return join(base, ".claude");
+    case "codex":       return global ? codexConfigDir() : process.cwd();
     case "cursor":      return join(base, ".cursor", "rules");
     case "windsurf":    return join(base, ".windsurfrules");
     case "copilot":     return join(base, ".github", "copilot-instructions.md");
@@ -30,6 +31,7 @@ function sourcePath(tool: ToolSource, global?: boolean): string {
 
 const SOURCE_REL: Record<ToolSource, string> = {
   "claude-code": ".claude/{skills,commands,rules}/",
+  "codex": "AGENTS.md, .agents/skills/, CODEX_HOME/prompts/",
   "cursor": ".cursor/rules/",
   "windsurf": ".windsurfrules",
   "copilot": ".github/copilot-instructions.md",
@@ -38,6 +40,11 @@ const SOURCE_REL: Record<ToolSource, string> = {
 // Human-readable location hint, prefixed with ~/ for global scope and left
 // cwd-relative for project scope — matching where sourcePath actually reads.
 export function sourceHint(tool: ToolSource, global?: boolean): string {
+  if (tool === "codex") {
+    return global
+      ? "~/.agents/skills/, CODEX_HOME/AGENTS.md, CODEX_HOME/prompts/"
+      : ".agents/skills/, AGENTS.md";
+  }
   return (global ? "~/" : "") + SOURCE_REL[tool];
 }
 
@@ -124,6 +131,57 @@ export function listAssets(tool: ToolSource, global?: boolean): ImportedAsset[] 
     return assets;
   }
 
+  if (tool === "codex") {
+    const assets: ImportedAsset[] = [];
+    const skillsDir = global
+      ? join(homedir(), ".agents", "skills")
+      : join(process.cwd(), ".agents", "skills");
+
+    if (existsSync(skillsDir)) {
+      for (const name of readdirSync(skillsDir)) {
+        const dir = join(skillsDir, name);
+        const file = join(dir, "SKILL.md");
+        if (!existsSync(dir) || !statSync(dir).isDirectory() || !existsSync(file)) continue;
+        const raw = readFileSync(file, "utf-8");
+        assets.push({
+          id: name,
+          kind: "skill",
+          body: stripCoactlHeader(stripYamlFrontmatter(raw)),
+          description: extractDescription(raw),
+        });
+      }
+    }
+
+    const agentsFile = global ? join(codexConfigDir(), "AGENTS.md") : join(process.cwd(), "AGENTS.md");
+    if (existsSync(agentsFile)) {
+      const raw = readFileSync(agentsFile, "utf-8");
+      const blocks = extractCoactlBlocks(raw);
+      if (blocks.length > 0) {
+        assets.push(...blocks.map((block) => ({ ...block, kind: "rule" as AssetKind })));
+      } else if (raw.trim().length > 0) {
+        assets.push({ id: "codex-agents", kind: "rule", body: raw.trimStart() });
+      }
+    }
+
+    // Coactl only emits Codex prompts in global scope because project commands
+    // are not supported by the current Codex adapter.
+    const promptsDir = join(codexConfigDir(), "prompts");
+    if (global && existsSync(promptsDir)) {
+      for (const file of readdirSync(promptsDir)) {
+        if (!file.endsWith(".md")) continue;
+        const raw = readFileSync(join(promptsDir, file), "utf-8");
+        assets.push({
+          id: basename(file, ".md"),
+          kind: "command",
+          body: stripCoactlHeader(stripYamlFrontmatter(raw)),
+          description: extractDescription(raw),
+        });
+      }
+    }
+
+    return assets;
+  }
+
   if (tool === "cursor") {
     if (!existsSync(path)) return [];
     return readdirSync(path)
@@ -197,6 +255,7 @@ export async function importAction(
       message: "Import from which tool?",
       options: [
         { value: "claude-code", label: "Claude Code", hint: sourceHint("claude-code", options.global) },
+        { value: "codex",       label: "Codex",       hint: sourceHint("codex", options.global) },
         { value: "cursor",      label: "Cursor",      hint: sourceHint("cursor", options.global) },
         { value: "windsurf",    label: "Windsurf",    hint: sourceHint("windsurf", options.global) },
         { value: "copilot",     label: "Copilot",     hint: sourceHint("copilot", options.global) },

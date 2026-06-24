@@ -21,7 +21,7 @@ export function KeyHints({ hints = DEFAULT_HINTS }: KeyHintsProps) {
     <Box paddingX={1} gap={2}>
       {hints.map((hint) => (
         <Box key={hint.key} gap={1}>
-          <Text color="cyan" bold>
+          <Text color="magenta" bold>
             [{hint.key}]
           </Text>
           <Text dimColor>{hint.label}</Text>
