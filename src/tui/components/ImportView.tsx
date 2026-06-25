@@ -31,6 +31,7 @@ interface ImportViewProps {
   onCancel: () => void;
   onListAssets: (tool: ImportTool) => Promise<ImportCandidate[]>;
   onImport: (tool: ImportTool, ids: string[]) => Promise<{ imported: number; errors: string[] }>;
+  tools?: ImportTool[];
   rows: number;
   columns: number;
   global: boolean;
@@ -44,7 +45,8 @@ type Step =
   | { kind: "done"; imported: number; errors: string[] }
   | { kind: "error"; message: string };
 
-export function ImportView({ onCancel, onListAssets, onImport, rows, columns, global }: ImportViewProps) {
+export function ImportView({ onCancel, onListAssets, onImport, tools, rows, columns, global }: ImportViewProps) {
+  const visibleTools = tools ? TOOLS.filter((tool) => tools.includes(tool.value)) : TOOLS;
   const [step, setStep] = useState<Step>({ kind: "tool-pick" });
   const [toolIndex, setToolIndex] = useState(0);
   const [assetIndex, setAssetIndex] = useState(0);
@@ -64,10 +66,10 @@ export function ImportView({ onCancel, onListAssets, onImport, rows, columns, gl
     }
 
     if (step.kind === "tool-pick") {
-      if (input === "j" || key.downArrow) setToolIndex((i) => Math.min(i + 1, TOOLS.length - 1));
+      if (input === "j" || key.downArrow) setToolIndex((i) => Math.min(i + 1, visibleTools.length - 1));
       if (input === "k" || key.upArrow) setToolIndex((i) => Math.max(i - 1, 0));
       if (key.return) {
-        const tool = TOOLS[toolIndex]?.value;
+        const tool = visibleTools[toolIndex]?.value;
         if (!tool) return;
         setStep({ kind: "loading" });
         onListAssets(tool)
@@ -115,7 +117,10 @@ export function ImportView({ onCancel, onListAssets, onImport, rows, columns, gl
         {step.kind === "tool-pick" && (
           <Box flexDirection="column" gap={1}>
             <Text dimColor>[j/k] nav  [Enter] select  [q] cancel</Text>
-            {TOOLS.map((t, i) => (
+            {visibleTools.length === 0 && (
+              <Text dimColor>No installed tools detected. Use the CLI with --from &lt;tool&gt; to force an import source.</Text>
+            )}
+            {visibleTools.map((t, i) => (
               <Box key={t.value} gap={2}>
                 <Text color={i === toolIndex ? "cyan" : undefined}>{i === toolIndex ? "❯" : " "}</Text>
                 <Text bold={i === toolIndex} color={i === toolIndex ? "cyan" : undefined}>

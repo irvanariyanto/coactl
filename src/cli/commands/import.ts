@@ -19,6 +19,7 @@ import {
 } from "../../io/global-paths.js";
 import { BRAND } from "../../tui/theme.js";
 import type { AssetKind } from "../../schema/index.js";
+import { detectInstalledTargets } from "../../tools/detect.js";
 
 export type ToolSource =
   | "claude-code"
@@ -51,6 +52,12 @@ const VALID_SOURCES: ToolSource[] = [
   "windsurf",
   "copilot",
 ];
+
+function installedToolSources(): ToolSource[] {
+  return detectInstalledTargets().filter((target): target is ToolSource =>
+    VALID_SOURCES.includes(target as ToolSource),
+  );
+}
 
 export interface ImportedAsset {
   id: string;
@@ -452,7 +459,8 @@ export async function importAction(
 ): Promise<void> {
   p.intro(chalk.bgCyan(chalk.black(` ${BRAND} import `)));
 
-  let tool: ToolSource;
+  let tool: ToolSource | undefined;
+  const installedTools = installedToolSources();
   if (options.from) {
     if (!VALID_SOURCES.includes(options.from as ToolSource)) {
       p.log.error(`Unknown source "${options.from}". Valid: ${VALID_SOURCES.join(", ")}`);
@@ -461,32 +469,67 @@ export async function importAction(
     }
     tool = options.from as ToolSource;
   } else if (!id && !options.all) {
+    if (installedTools.length === 0) {
+      p.log.warn("No installed AI tools detected. Use --from <tool> to force an import source.");
+      return;
+    }
     const picked = await p.select({
       message: "Import from which tool?",
-      options: [
-        { value: "claude-code", label: "Claude Code", hint: sourceHint("claude-code", options.global) },
-        { value: "codex",       label: "Codex",       hint: sourceHint("codex", options.global) },
-        { value: "antigravity", label: "Antigravity", hint: sourceHint("antigravity", options.global) },
-        { value: "gemini",      label: "Gemini CLI",  hint: sourceHint("gemini", options.global) },
-        { value: "cline",       label: "Cline",       hint: sourceHint("cline", options.global) },
-        { value: "roo-code",    label: "Roo Code",    hint: sourceHint("roo-code", options.global) },
-        { value: "continue",    label: "Continue",    hint: sourceHint("continue", options.global) },
-        { value: "aider",       label: "Aider",       hint: sourceHint("aider", options.global) },
-        { value: "opencode",    label: "OpenCode",    hint: sourceHint("opencode", options.global) },
-        { value: "zed",         label: "Zed",         hint: sourceHint("zed", options.global) },
-        { value: "jetbrains",   label: "JetBrains AI", hint: sourceHint("jetbrains", options.global) },
-        { value: "cursor",      label: "Cursor",      hint: sourceHint("cursor", options.global) },
-        { value: "windsurf",    label: "Windsurf",    hint: sourceHint("windsurf", options.global) },
-        { value: "copilot",     label: "Copilot",     hint: sourceHint("copilot", options.global) },
-      ],
+      options: installedTools.map((value) => ({ value, label: value, hint: `${sourceHint(value, options.global)} · installed` })),
     });
     if (p.isCancel(picked)) {
       p.cancel("Cancelled.");
       return;
     }
     tool = picked as ToolSource;
-  } else {
-    tool = "claude-code";
+  }
+
+  if (!tool && options.all) {
+    if (installedTools.length === 0) {
+      p.log.warn("No installed AI tools detected. Use --from <tool> to force an import source.");
+      return;
+    }
+    const root = options.global ? globalConfigDir() : join(process.cwd(), ".coactl");
+    let count = 0;
+    let total = 0;
+    for (const source of installedTools) {
+      const assets = listAssets(source, options.global);
+      total += assets.length;
+      for (const asset of assets) {
+        if (writeAsset(asset, root, options.force, options.global)) count++;
+      }
+    }
+    if (total === 0) {
+      p.log.warn(`No importable assets found in installed tools (${installedTools.join(", ")})`);
+      return;
+    }
+    p.outro(chalk.green(`Imported ${count}/${total} asset(s) from ${installedTools.length} installed tool(s). Run ${chalk.bold("coactl sync")} to generate files for other tools.`));
+    return;
+  }
+
+  if (!tool && id) {
+    if (installedTools.length === 0) {
+      p.log.warn("No installed AI tools detected. Use --from <tool> to force an import source.");
+      return;
+    }
+    const root = options.global ? globalConfigDir() : join(process.cwd(), ".coactl");
+    for (const source of installedTools) {
+      const asset = listAssets(source, options.global).find((a) => a.id === id);
+      if (!asset) continue;
+      const ok = writeAsset(asset, root, options.force, options.global);
+      if (ok) p.outro(chalk.green(`Imported from ${source}. Run ${chalk.bold("coactl sync")} to generate files for other tools.`));
+      else process.exitCode = 1;
+      return;
+    }
+    p.log.error(`"${id}" not found in installed tools (${installedTools.join(", ")})`);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (!tool) {
+    p.log.error("No import source selected.");
+    process.exitCode = 1;
+    return;
   }
 
   const sourceLoc = sourcePath(tool, options.global);

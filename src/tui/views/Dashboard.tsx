@@ -66,6 +66,7 @@ export interface DashboardTool {
   label: string;
   state: ToolState;
   targetPath: string;
+  installReason?: string;
   assetCount: number;
   nativeCount: number;
   degradedCount: number;
@@ -725,6 +726,7 @@ export function Dashboard({
           }
           return result;
         }}
+        tools={tools.filter((tool) => tool.state === "configured").map((tool) => tool.id as ImportTool)}
         rows={rows}
         columns={columns}
         global={effectiveImportGlobal}
@@ -998,9 +1000,9 @@ function DashboardHome({
         </Box>
         <Box marginTop={1} flexDirection="column">
           <Text bold>Connected Tools</Text>
-          <Text dimColor>All supported tool adapters are counted here. Asset counts show current target usage.</Text>
+          <Text dimColor>Installed tools detected on this device. Asset counts show current target usage.</Text>
           {connectedTools.length === 0 ? (
-            <Text dimColor>No supported tools are available.</Text>
+            <Text dimColor>No installed tools detected. Use explicit CLI --target/--from flags to force a tool.</Text>
           ) : (
             connectedTools.slice(0, Math.max(1, height - 18)).map((tool) => (
               <Box key={tool.id} gap={1}>
@@ -1139,15 +1141,15 @@ function AssetsScreen({
 
 function ToolsScreen({ tools, selectedIndex, active, height, width }: { tools: DashboardTool[]; selectedIndex: number; active: boolean; height: number; width: number }) {
   const { visible, start, above, below } = rowWindow(tools, selectedIndex, Math.max(1, height - 5));
-  const connectedCount = tools.filter((tool) => tool.state === "configured").length;
+  const installedCount = tools.filter((tool) => tool.state === "configured").length;
   return (
-    <Panel title={`Tools & Integrations · ${connectedCount} connected · ${tools.length} supported`} active={active} width={width} height={height}>
+    <Panel title={`Tools & Integrations · ${installedCount} installed · ${tools.length - installedCount} not installed · ${tools.length} supported`} active={active} width={width} height={height}>
       <Box flexDirection="column">
         <Box gap={1}>
-          <Text dimColor>State</Text>
+          <Text dimColor>Install</Text>
           <Text dimColor>Tool</Text>
           <Text dimColor>Assets</Text>
-          <Text dimColor>Target path</Text>
+          <Text dimColor>Detected by / target path</Text>
         </Box>
         {tools.length === 0 ? (
           <EmptyState title="No tools are configured for this scope." detail="Add targets to assets in your manifest or import existing tool files with i." />
@@ -1158,12 +1160,15 @@ function ToolsScreen({ tools, selectedIndex, active, height, width }: { tools: D
               const realIndex = start + index;
               const selected = active && realIndex === selectedIndex;
               const color = tool.state === "configured" ? "green" : tool.state === "available" ? "yellow" : "gray";
+              const installLabel = tool.state === "configured" ? "installed" : "missing";
+              const detail = tool.installReason ?? tool.targetPath;
               return (
                 <Box key={tool.id} gap={1}>
                   <Text color={selected ? "magenta" : color}>{selected ? ">" : tool.state === "configured" ? "●" : "○"}</Text>
+                  <Text color={color}>{installLabel.padEnd(9)}</Text>
                   <Text color={selected ? "magenta" : undefined} bold={selected}>{truncate(tool.label, 18)}</Text>
                   <Text>{tool.assetCount}</Text>
-                  <Text dimColor>{compactPath(tool.targetPath, Math.max(18, width - 36))}</Text>
+                  <Text dimColor>{compactPath(detail, Math.max(18, width - 48))}</Text>
                 </Box>
               );
             })}
@@ -1470,10 +1475,15 @@ function AssetDetails({ asset, width }: { asset: DashboardAsset; width: number }
 
 function ToolDetails({ tool, width }: { tool: DashboardTool; width: number }) {
   const color = tool.state === "configured" ? "green" : tool.state === "available" ? "yellow" : "gray";
+  const installed = tool.state === "configured";
   return (
     <Box flexDirection="column">
       <Text color="magenta" bold>{tool.label}</Text>
-      <Text color={color}>{tool.state}</Text>
+      <Text color={color}>{installed ? "installed on this device" : "not detected on this device"}</Text>
+      <Box marginTop={1} flexDirection="column">
+        <Text bold>Detection</Text>
+        <Text dimColor>{tool.installReason ? compactPath(tool.installReason, width - 4) : "No known command or config path found."}</Text>
+      </Box>
       <Box marginTop={1} flexDirection="column">
         <Text bold>Target path</Text>
         <Text dimColor>{compactPath(tool.targetPath, width - 4)}</Text>
@@ -1486,7 +1496,7 @@ function ToolDetails({ tool, width }: { tool: DashboardTool; width: number }) {
       </Box>
       <Box marginTop={1} flexDirection="column">
         <Text bold>How to configure</Text>
-        <Text>{tool.assetCount > 0 ? "Assets already target this tool." : "Add this target to an asset's targets list."}</Text>
+        <Text>{installed ? tool.assetCount > 0 ? "Assets already target this tool." : "Add this target to an asset's targets list." : "Install the tool or use explicit CLI --target/--from flags to force it."}</Text>
         <Text dimColor>{truncate(tool.note ?? "Persistent enable/disable is manifest-driven to keep CLI behavior compatible.", width - 4)}</Text>
       </Box>
     </Box>

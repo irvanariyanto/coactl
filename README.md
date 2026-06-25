@@ -231,7 +231,7 @@ coactl build --target cursor --kind rule
 Write native files to disk for all configured tools.
 
 ```bash
-coactl sync                      # all targets, project scope
+coactl sync                      # installed targets only, project scope
 coactl sync --target cursor      # one tool only
 coactl sync --target codex       # Codex skills and project AGENTS.md rules
 coactl sync --target antigravity # Antigravity skills, commands, and AGENTS.md rules
@@ -245,16 +245,18 @@ coactl sync --global --prune     # remove stale Coactl-managed output
 coactl sync --global --prune --dry-run  # preview writes and pruning
 ```
 
+Without `--target`, sync detects installed tools on the device (PATH commands and known config directories) and writes only those targets. Use `--target <tool>` to force a target even when it is not detected.
+
 ---
 
 ### `coactl import`
 Import assets from an existing AI tool into coactl so they can be synced to other tools.
 
 ```bash
-# Claude Code skills (default)
+# Import from detected installed tools
 coactl import my-skill
-coactl import --all
-coactl import --all --global       # from ~/.claude/skills/ → ~/.config/coactl/assets/
+coactl import --all              # scan installed tools only
+coactl import --all --global     # scan installed tools at global paths
 
 # Cursor rules
 coactl import --from cursor my-rule
@@ -279,6 +281,8 @@ coactl import --from copilot --all
 
 coactl import my-skill --force     # overwrite existing asset
 ```
+
+Without `--from`, import scans detected installed tools. Use `--from <tool>` to force a specific source.
 
 Imported assets get a canonical asset definition (targeting every compatible configured tool) and the original body. Run `coactl sync` after importing to generate native files for other tools.
 

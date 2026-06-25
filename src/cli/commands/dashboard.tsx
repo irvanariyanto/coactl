@@ -21,6 +21,7 @@ import { renderClaudeAssetFrontmatter } from "../../scaffold/templates.js";
 import type { ImportTool, ImportCandidate } from "../../tui/components/ImportView.js";
 import { SUPPORTED_TARGETS, type Target } from "../../schema/index.js";
 import type { SourceConfig } from "../../schema/manifest.js";
+import { detectInstalledTargets, toolInstallInfo } from "../../tools/detect.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -153,6 +154,8 @@ function buildWorkspace(
 function buildTools(assets: DashboardAsset[], scope: "global" | "project", rootDir: string): DashboardTool[] {
   return SUPPORTED_TARGETS.map((target) => {
     const targeted = assets.filter((asset) => asset.targets.includes(target));
+    const installInfo = toolInstallInfo(target);
+    const installed = installInfo.installed;
     let nativeCount = 0;
     let degradedCount = 0;
     let skippedCount = 0;
@@ -165,16 +168,19 @@ function buildTools(assets: DashboardAsset[], scope: "global" | "project", rootD
     return {
       id: target,
       label: TARGET_LABEL[target],
-      state: "configured",
+      state: installed ? "configured" : "available",
       targetPath: targetBasePath(target, scope, rootDir),
+      installReason: installInfo.reason,
       assetCount: targeted.length,
       nativeCount,
       degradedCount,
       skippedCount,
       scopes: [scope],
-      note: targeted.length > 0
-        ? "This supported tool is connected and referenced by one or more asset targets."
-        : "This supported tool is connected. Add this target to an asset to generate files for it.",
+      note: installed
+        ? targeted.length > 0
+          ? "This installed tool is referenced by one or more asset targets."
+          : "This tool is installed. Add this target to an asset to generate files for it."
+        : "This supported tool was not detected on this device.",
     };
   });
 }
@@ -187,8 +193,9 @@ function mergeTools(globalTools: DashboardTool[], projectTools: DashboardTool[] 
     const assetCount = matches.reduce((sum, tool) => sum + tool.assetCount, 0);
     return {
       ...first,
-      state: "configured",
+      state: matches.some((tool) => tool.state === "configured") ? "configured" : "available",
       targetPath: matches.map((tool) => `${tool.scopes[0]}:${tool.targetPath}`).join(" | "),
+      installReason: matches.find((tool) => tool.installReason)?.installReason,
       assetCount,
       nativeCount: matches.reduce((sum, tool) => sum + tool.nativeCount, 0),
       degradedCount: matches.reduce((sum, tool) => sum + tool.degradedCount, 0),
@@ -255,7 +262,8 @@ async function loadScopeData(
   }
 
   const registry = resolveRegistry(allLoaded, manifest);
-  const { files: emittedFiles, diagnostics } = transform(registry, manifest, { scope: assetScope });
+  const installedTargets = detectInstalledTargets();
+  const { files: emittedFiles, diagnostics } = transform(registry, manifest, { targets: installedTargets, scope: assetScope });
   const driftEntries = checkDrift(emittedFiles, rootDir);
   const outputs: DashboardOutput[] = emittedFiles.map((file) => {
     const drift = driftEntries.find((entry) => entry.assetId === file.assetId && entry.path === file.path);
@@ -362,7 +370,8 @@ async function syncScope(
     allLoaded.push(...result.assets);
   }
   const registry = resolveRegistry(allLoaded, manifest);
-  const { files } = transform(registry, manifest, { scope });
+  const installedTargets = detectInstalledTargets();
+  const { files } = transform(registry, manifest, { targets: installedTargets, scope });
   return writeFiles(files, rootDir);
 }
 

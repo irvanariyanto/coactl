@@ -9,6 +9,7 @@ import { pruneManagedOutputs, writeFiles } from "../../io/write-files.js";
 import { globalRootDir, resolveScope } from "../../io/global-paths.js";
 import { createSpinner, printHeader } from "../../ui/output.js";
 import { SUPPORTED_TARGETS, type AssetKind, type Target } from "../../schema/index.js";
+import { detectInstalledTargets } from "../../tools/detect.js";
 
 const TARGET_HINTS: Record<Target, string> = {
   "claude-code": ".claude/  (skills, commands, rules)",
@@ -63,16 +64,21 @@ export async function syncAction(options: {
   }
 
   let selectedTargets: Target[] | undefined;
+  const installedTargets = detectInstalledTargets();
 
   if (!options.target && process.stdout.isTTY) {
+    if (installedTargets.length === 0) {
+      p.log.warn("No installed AI tools detected. Use --target <tool> to force a sync target.");
+      return;
+    }
     const picked = await p.multiselect<Target>({
-      message: "Sync to which targets?",
-      options: SUPPORTED_TARGETS.map((t) => ({
+      message: "Sync to which installed targets?",
+      options: installedTargets.map((t) => ({
         value: t,
         label: t,
-        hint: TARGET_HINTS[t],
+        hint: `${TARGET_HINTS[t]} · installed`,
       })),
-      initialValues: [...SUPPORTED_TARGETS],
+      initialValues: installedTargets,
     });
     if (p.isCancel(picked)) {
       p.cancel("Cancelled.");
@@ -85,6 +91,12 @@ export async function syncAction(options: {
     }
   } else if (options.target) {
     selectedTargets = [options.target as Target];
+  } else {
+    selectedTargets = installedTargets;
+    if (selectedTargets.length === 0) {
+      p.log.warn("No installed AI tools detected. Use --target <tool> to force a sync target.");
+      return;
+    }
   }
 
   const spinner = createSpinner("Loading manifest and sources...").start();
