@@ -67,6 +67,7 @@ export interface DashboardTool {
   state: ToolState;
   targetPath: string;
   installReason?: string;
+  importableCount?: number;
   assetCount: number;
   nativeCount: number;
   degradedCount: number;
@@ -219,6 +220,26 @@ function actionLabel(action: PreviewAction): string {
   return "skip";
 }
 
+function syncLabel(action: PreviewAction): string {
+  if (action === "skip") return "synced";
+  if (action === "create") return "missing";
+  if (action === "update") return "outdated";
+  if (action === "conflict") return "modified";
+  return "remove";
+}
+
+function assetTargetSyncLabel(asset: DashboardAsset, target: Target, tools?: DashboardTool[]): { label: string; color: string } {
+  const tool = tools?.find((candidate) => candidate.id === target);
+  if (tool && tool.state !== "configured") return { label: "not installed", color: "gray" };
+
+  const targetOutputs = (asset.outputs ?? []).filter((output) => output.target === target);
+  if (targetOutputs.length === 0) return { label: "not emitted", color: "gray" };
+  if (targetOutputs.some((output) => output.action === "conflict")) return { label: "modified", color: "red" };
+  if (targetOutputs.some((output) => output.action === "update")) return { label: "outdated", color: "yellow" };
+  if (targetOutputs.some((output) => output.action === "create")) return { label: "missing", color: "yellow" };
+  return { label: "synced", color: "green" };
+}
+
 function formatCount(value: number, singular: string, plural = `${singular}s`): string {
   return `${value} ${value === 1 ? singular : plural}`;
 }
@@ -268,28 +289,6 @@ function visibleAssets(
 }
 
 type SortMode = "status" | "kind" | "tool" | "path";
-type AssetListRow =
-  | { type: "group"; kind: AssetKind; count: number }
-  | { type: "asset"; asset: DashboardAsset; assetIndex: number };
-
-const ASSET_KIND_ORDER: AssetKind[] = ["skill", "command", "rule", "workflow"];
-
-function assetRowsByKind(assets: DashboardAsset[]): AssetListRow[] {
-  const rows: AssetListRow[] = [];
-
-  for (const kind of ASSET_KIND_ORDER) {
-    const group = assets
-      .map((asset, assetIndex) => ({ asset, assetIndex }))
-      .filter((entry) => entry.asset.kind === kind);
-
-    if (group.length === 0) continue;
-    rows.push({ type: "group", kind, count: group.length });
-    rows.push(...group.map((entry) => ({ type: "asset" as const, ...entry })));
-  }
-
-  return rows;
-}
-
 function countByStatus(assets: DashboardAsset[]) {
   return assets.reduce(
     (acc, asset) => {
@@ -412,6 +411,8 @@ export function Dashboard({
   const [focus, setFocus] = useState<FocusArea>("main");
   const [selectedNav, setSelectedNav] = useState(0);
   const [selectedRow, setSelectedRow] = useState(0);
+  const [selectedAssetTool, setSelectedAssetTool] = useState(0);
+  const [selectedAssetRow, setSelectedAssetRow] = useState(0);
   const [selectedConflictAction, setSelectedConflictAction] = useState(0);
   const [paletteIndex, setPaletteIndex] = useState(0);
   const [scopeFilter, setScopeFilter] = useState<DashboardScopeFilter>("all");
@@ -430,7 +431,11 @@ export function Dashboard({
   const assets = visibleAssets(liveData.assets, scopeFilter, filterOutOfSync, searchQuery, sortMode);
   const tools = (liveData.tools ?? []).filter((tool) => scopeFilter === "all" || tool.scopes.includes(scopeFilter));
   const conflicts = liveData.conflicts.filter((conflict) => scopeFilter === "all" || conflict.scope === scopeFilter);
-  const selectedAsset = assets[selectedRow];
+  const assetTool = tools[selectedAssetTool];
+  const toolAssets = assetTool
+    ? assets.filter((asset) => asset.targets.includes(assetTool.id))
+    : assets;
+  const selectedAsset = screen === "assets" ? toolAssets[selectedAssetRow] : assets[selectedRow];
   const selectedOutput = [...outputs].sort((a, b) => ACTION_PRIORITY[a.action] - ACTION_PRIORITY[b.action] || a.assetId.localeCompare(b.assetId))[selectedRow];
   const selectedTool = tools[selectedRow];
   const selectedConflict = conflicts[selectedRow];
@@ -444,7 +449,7 @@ export function Dashboard({
   const listHeight = Math.max(4, bodyHeight - 4);
 
   const rowCount =
-    screen === "assets" ? assets.length
+    screen === "assets" ? tools.length
     : screen === "tools" ? tools.length
     : screen === "preview" ? outputs.length
     : screen === "conflicts" ? conflicts.length
@@ -453,6 +458,8 @@ export function Dashboard({
     : 1;
 
   useBoundedSelection(selectedRow, setSelectedRow, rowCount);
+  useBoundedSelection(selectedAssetTool, setSelectedAssetTool, tools.length);
+  useBoundedSelection(selectedAssetRow, setSelectedAssetRow, toolAssets.length);
 
   const effectiveImportGlobal =
     scopeFilter === "global" ? true : scopeFilter === "project" ? false : importGlobal;
@@ -526,6 +533,15 @@ export function Dashboard({
       return;
     }
     if (screen === "dashboard") {
+      return;
+    }
+    if (screen === "assets") {
+      if (focus === "details") {
+        setSelectedAssetRow((prev) => clamp(prev + delta, 0, Math.max(toolAssets.length - 1, 0)));
+      } else {
+        setSelectedAssetTool((prev) => clamp(prev + delta, 0, Math.max(tools.length - 1, 0)));
+        setSelectedAssetRow(0);
+      }
       return;
     }
     setSelectedRow((prev) => clamp(prev + delta, 0, Math.max(rowCount - 1, 0)));
@@ -665,6 +681,8 @@ export function Dashboard({
         setActiveScreen(SCREEN_ITEMS[selectedNav].id);
       } else if (screen === "dashboard") {
         setActiveScreen(outputs.some((output) => output.action !== "skip") ? "preview" : "assets");
+      } else if (screen === "assets") {
+        setFocus("details");
       } else if (screen === "preview") {
         setOverlay("confirm-sync");
       } else if (screen === "tools") {
@@ -809,8 +827,11 @@ export function Dashboard({
             {screen === "assets" && (
               <AssetsScreen
                 assets={assets}
-                selectedIndex={selectedRow}
+                tools={tools}
+                selectedToolIndex={selectedAssetTool}
+                selectedAssetIndex={selectedAssetRow}
                 active={focus === "main"}
+                assetListActive={focus === "details"}
                 height={bodyHeight}
                 width={mainWidth}
                 showScope={liveData.scope === "project+global"}
@@ -1062,8 +1083,11 @@ function FlowLine({
 
 function AssetsScreen({
   assets,
-  selectedIndex,
+  tools,
+  selectedToolIndex,
+  selectedAssetIndex,
   active,
+  assetListActive,
   height,
   width,
   showScope,
@@ -1072,8 +1096,11 @@ function AssetsScreen({
   sortMode,
 }: {
   assets: DashboardAsset[];
-  selectedIndex: number;
+  tools: DashboardTool[];
+  selectedToolIndex: number;
+  selectedAssetIndex: number;
   active: boolean;
+  assetListActive: boolean;
   height: number;
   width: number;
   showScope: boolean;
@@ -1081,59 +1108,80 @@ function AssetsScreen({
   filterOutOfSync: boolean;
   sortMode: SortMode;
 }) {
-  const rows = assetRowsByKind(assets);
-  const selectedRowPosition = Math.max(0, rows.findIndex((row) => row.type === "asset" && row.assetIndex === selectedIndex));
-  const { visible, start, above, below } = rowWindow(rows, selectedRowPosition, Math.max(1, height - 5));
-  const titleParts = [`Assets (${assets.length})`, "group:kind", `sort:${sortMode}`];
+  const selectedTool = tools[selectedToolIndex];
+  const selectedToolAssets = selectedTool
+    ? assets.filter((asset) => asset.targets.includes(selectedTool.id))
+    : [];
+  const toolWindow = rowWindow(tools, selectedToolIndex, Math.max(1, height - 5));
+  const assetWindow = rowWindow(selectedToolAssets, selectedAssetIndex, Math.max(1, height - 5));
+  const toolWidth = Math.max(22, Math.min(34, Math.floor(width * 0.36)));
+  const assetWidth = Math.max(28, width - toolWidth - 2);
+  const titleParts = [`Assets by Tool (${assets.length})`, `sort:${sortMode}`];
   if (filterOutOfSync) titleParts.push("not-synced");
   if (searchQuery) titleParts.push(`search:${searchQuery}`);
   return (
     <Panel title={titleParts.join(" · ")} active={active} width={width} height={height}>
-      <Box flexDirection="column">
-        <Box gap={1}>
-          <Text dimColor>{showScope ? "Sc" : ""}</Text>
-          <Text dimColor>{truncate("Asset", Math.max(12, width - 52))}</Text>
-          <Text dimColor>Kind</Text>
-          <Text dimColor>Status</Text>
-          <Text dimColor>Targets</Text>
-        </Box>
-        {assets.length === 0 ? (
-          <EmptyState
-            title={searchQuery ? "No assets match your search." : "No assets found yet."}
-            detail={searchQuery ? "Clear the search or try an asset id, path, kind, tool, or status." : "Add assets to your shared assets directory or press i to import from an existing AI tool."}
-          />
-        ) : (
-          <>
-            {above > 0 && <Text dimColor>↑ {above} more</Text>}
-            {visible.map((row, index) => {
-              const realIndex = start + index;
-              if (row.type === "group") {
+      <Box gap={1} height="100%">
+        <Box flexDirection="column" width={toolWidth}>
+          <Text dimColor>{active ? "Select tool" : "Tools"} · Enter opens assets</Text>
+          {tools.length === 0 ? (
+            <Text dimColor>No tools detected for this scope.</Text>
+          ) : (
+            <>
+              {toolWindow.above > 0 && <Text dimColor>↑ {toolWindow.above} more</Text>}
+              {toolWindow.visible.map((tool, index) => {
+                const realIndex = toolWindow.start + index;
+                const selected = active && realIndex === selectedToolIndex;
+                const count = assets.filter((asset) => asset.targets.includes(tool.id)).length;
+                const color = tool.state === "configured" ? "green" : "gray";
                 return (
-                  <Box key={`group:${row.kind}:${realIndex}`} marginTop={realIndex === 0 ? 0 : 1} gap={1}>
-                    <Text color="magenta" bold>{row.kind.toUpperCase()}</Text>
-                    <Text dimColor>{formatCount(row.count, "asset")}</Text>
+                  <Box key={tool.id} gap={1}>
+                    <Text color={selected ? "magenta" : color}>{selected ? ">" : tool.state === "configured" ? "●" : "○"}</Text>
+                    <Text color={selected ? "magenta" : undefined} bold={selected}>{truncate(tool.label, toolWidth - 10)}</Text>
+                    <Text dimColor>{count}</Text>
                   </Box>
                 );
-              }
-
-              const asset = row.asset;
-              const selected = active && row.assetIndex === selectedIndex;
-              return (
-                <Box key={`${asset.scope}:${asset.id}`} gap={1}>
-                  <Text color={selected ? "magenta" : "gray"}>{selected ? ">" : " "}</Text>
-                  {showScope && <Text color={asset.scope === "project" ? "cyan" : "magenta"}>{asset.scope === "project" ? "P" : "G"}</Text>}
-                  <Text color={selected ? "magenta" : undefined} bold={selected}>
-                    {truncate(asset.id, Math.max(10, width - 56))}
-                  </Text>
-                  <Text color="gray">{truncate(asset.kind, 8)}</Text>
-                  <StatusBadge status={asset.status} showLabel />
-                  <Text dimColor>{truncate(asset.targets.map((target) => TARGET_LABEL[target]).join(", "), 24)}</Text>
-                </Box>
-              );
-            })}
-            {below > 0 && <Text dimColor>↓ {below} more</Text>}
-          </>
-        )}
+              })}
+              {toolWindow.below > 0 && <Text dimColor>↓ {toolWindow.below} more</Text>}
+            </>
+          )}
+        </Box>
+        <Box flexDirection="column" width={assetWidth}>
+          <Text dimColor>{selectedTool ? `${selectedTool.label} assets` : "Assets"} · Tab/Enter details</Text>
+          <Box gap={1}>
+            <Text dimColor>{showScope ? "Sc" : ""}</Text>
+            <Text dimColor>{truncate("Asset", Math.max(12, assetWidth - 40))}</Text>
+            <Text dimColor>Kind</Text>
+            <Text dimColor>Sync</Text>
+          </Box>
+          {selectedToolAssets.length === 0 ? (
+            <EmptyState
+              title={selectedTool ? `No assets target ${selectedTool.label}.` : "No tool selected."}
+              detail={selectedTool ? "Add this target to assets or import existing tool files." : "Select a tool on the left."}
+            />
+          ) : (
+            <>
+              {assetWindow.above > 0 && <Text dimColor>↑ {assetWindow.above} more</Text>}
+              {assetWindow.visible.map((asset, index) => {
+                const realIndex = assetWindow.start + index;
+                const selected = assetListActive && realIndex === selectedAssetIndex;
+                const sync = selectedTool ? assetTargetSyncLabel(asset, selectedTool.id, tools) : { label: "unknown", color: "gray" };
+                return (
+                  <Box key={`${asset.scope}:${asset.id}`} gap={1}>
+                    <Text color={selected ? "magenta" : "gray"}>{selected ? ">" : " "}</Text>
+                    {showScope && <Text color={asset.scope === "project" ? "cyan" : "magenta"}>{asset.scope === "project" ? "P" : "G"}</Text>}
+                    <Text color={selected ? "magenta" : undefined} bold={selected}>
+                      {truncate(asset.id, Math.max(10, assetWidth - 42))}
+                    </Text>
+                    <Text color="gray">{truncate(asset.kind, 8)}</Text>
+                    <Text color={sync.color}>{sync.label}</Text>
+                  </Box>
+                );
+              })}
+              {assetWindow.below > 0 && <Text dimColor>↓ {assetWindow.below} more</Text>}
+            </>
+          )}
+        </Box>
       </Box>
     </Panel>
   );
@@ -1149,6 +1197,7 @@ function ToolsScreen({ tools, selectedIndex, active, height, width }: { tools: D
           <Text dimColor>Install</Text>
           <Text dimColor>Tool</Text>
           <Text dimColor>Assets</Text>
+          <Text dimColor>Import</Text>
           <Text dimColor>Detected by / target path</Text>
         </Box>
         {tools.length === 0 ? (
@@ -1168,7 +1217,8 @@ function ToolsScreen({ tools, selectedIndex, active, height, width }: { tools: D
                   <Text color={color}>{installLabel.padEnd(9)}</Text>
                   <Text color={selected ? "magenta" : undefined} bold={selected}>{truncate(tool.label, 18)}</Text>
                   <Text>{tool.assetCount}</Text>
-                  <Text dimColor>{compactPath(detail, Math.max(18, width - 48))}</Text>
+                  <Text color={(tool.importableCount ?? 0) > 0 ? "green" : "gray"}>{tool.importableCount ?? 0}</Text>
+                  <Text dimColor>{compactPath(detail, Math.max(18, width - 54))}</Text>
                 </Box>
               );
             })}
@@ -1363,7 +1413,7 @@ function DetailsPanel({
         screen === "conflicts" && conflict ? <ConflictDetails conflict={conflict} selectedAction={conflictActionIndex} width={width} /> :
         screen === "logs" && activity ? <ActivityDetails entry={activity} width={width} /> :
         screen === "settings" ? <SettingsDetails data={data} scopeFilter={scopeFilter} width={width} /> :
-        asset ? <AssetDetails asset={asset} width={width} /> :
+        asset ? <AssetDetails asset={asset} tools={data.tools ?? []} width={width} /> :
         <Text dimColor>Select an item to inspect metadata, target files, and next actions.</Text>}
     </Panel>
   );
@@ -1421,7 +1471,7 @@ function DashboardDetails({ data, scopeFilter, width }: { data: DashboardData; s
   );
 }
 
-function AssetDetails({ asset, width }: { asset: DashboardAsset; width: number }) {
+function AssetDetails({ asset, tools, width }: { asset: DashboardAsset; tools: DashboardTool[]; width: number }) {
   return (
     <Box flexDirection="column">
       <Text color="magenta" bold>{truncate(asset.id, width - 4)}</Text>
@@ -1434,12 +1484,13 @@ function AssetDetails({ asset, width }: { asset: DashboardAsset; width: number }
         {asset.modifiedAt && <Text dimColor>modified {asset.modifiedAt}</Text>}
       </Box>
       <Box marginTop={1} flexDirection="column">
-        <Text bold>Targets</Text>
+        <Text bold>Tool Sync Status</Text>
         {asset.targets.map((target) => {
           const capability = capabilityFor(target, asset.kind, asset.scope);
+          const sync = assetTargetSyncLabel(asset, target, tools);
           return (
-            <Text key={target} color={CAPABILITY_COLOR[capability]}>
-              {TARGET_LABEL[target]} · {capability}
+            <Text key={target} color={sync.color}>
+              {TARGET_LABEL[target]} · {sync.label} · {capability}
             </Text>
           );
         })}
@@ -1493,6 +1544,15 @@ function ToolDetails({ tool, width }: { tool: DashboardTool; width: number }) {
         <Text color="green">{tool.nativeCount} native</Text>
         <Text color="yellow">{tool.degradedCount} degraded</Text>
         <Text color="gray">{tool.skippedCount} skipped</Text>
+      </Box>
+      <Box marginTop={1} flexDirection="column">
+        <Text bold>Import to coactl</Text>
+        <Text color={(tool.importableCount ?? 0) > 0 ? "green" : "gray"}>
+          {(tool.importableCount ?? 0) > 0
+            ? `${tool.importableCount} importable asset${tool.importableCount === 1 ? "" : "s"} found`
+            : installed ? "No importable assets found for this tool." : "Install this tool before importing from it."}
+        </Text>
+        <Text dimColor>{installed ? `Press i, then select ${tool.label}.` : "CLI override: coactl import --from <tool>"}</Text>
       </Box>
       <Box marginTop={1} flexDirection="column">
         <Text bold>How to configure</Text>

@@ -156,6 +156,14 @@ function buildTools(assets: DashboardAsset[], scope: "global" | "project", rootD
     const targeted = assets.filter((asset) => asset.targets.includes(target));
     const installInfo = toolInstallInfo(target);
     const installed = installInfo.installed;
+    let importableCount = 0;
+    if (installed) {
+      try {
+        importableCount = listAssets(target as ToolSource, scope === "global").length;
+      } catch {
+        importableCount = 0;
+      }
+    }
     let nativeCount = 0;
     let degradedCount = 0;
     let skippedCount = 0;
@@ -171,6 +179,7 @@ function buildTools(assets: DashboardAsset[], scope: "global" | "project", rootD
       state: installed ? "configured" : "available",
       targetPath: targetBasePath(target, scope, rootDir),
       installReason: installInfo.reason,
+      importableCount,
       assetCount: targeted.length,
       nativeCount,
       degradedCount,
@@ -196,6 +205,7 @@ function mergeTools(globalTools: DashboardTool[], projectTools: DashboardTool[] 
       state: matches.some((tool) => tool.state === "configured") ? "configured" : "available",
       targetPath: matches.map((tool) => `${tool.scopes[0]}:${tool.targetPath}`).join(" | "),
       installReason: matches.find((tool) => tool.installReason)?.installReason,
+      importableCount: matches.reduce((sum, tool) => sum + (tool.importableCount ?? 0), 0),
       assetCount,
       nativeCount: matches.reduce((sum, tool) => sum + tool.nativeCount, 0),
       degradedCount: matches.reduce((sum, tool) => sum + tool.degradedCount, 0),
