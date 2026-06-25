@@ -25,6 +25,42 @@ export function codexConfigDir(): string {
   return resolve(process.env.CODEX_HOME || join(homedir(), ".codex"));
 }
 
+export function antigravityConfigDir(): string {
+  return resolve(process.env.ANTIGRAVITY_HOME || join(homedir(), ".antigravity"));
+}
+
+export function geminiConfigDir(): string {
+  return resolve(process.env.GEMINI_HOME || join(homedir(), ".gemini"));
+}
+
+export function clineConfigDir(): string {
+  return resolve(process.env.CLINE_HOME || join(homedir(), "Cline"));
+}
+
+export function rooCodeConfigDir(): string {
+  return resolve(process.env.ROO_CODE_HOME || join(homedir(), ".roo"));
+}
+
+export function continueConfigDir(): string {
+  return resolve(process.env.CONTINUE_HOME || join(homedir(), ".continue"));
+}
+
+export function aiderConfigDir(): string {
+  return resolve(process.env.AIDER_HOME || join(homedir(), ".aider"));
+}
+
+export function opencodeConfigDir(): string {
+  return resolve(process.env.OPENCODE_HOME || join(homedir(), ".config", "opencode"));
+}
+
+export function zedConfigDir(): string {
+  return resolve(process.env.ZED_HOME || join(homedir(), ".config", "zed"));
+}
+
+export function jetbrainsConfigDir(): string {
+  return resolve(process.env.JETBRAINS_AI_HOME || join(homedir(), ".aiassistant"));
+}
+
 export interface ManifestScopeOptions {
   global?: boolean;
   project?: boolean;
@@ -80,6 +116,15 @@ export function globalBasePath(target: Target): string {
   switch (target) {
     case "claude-code": return join(home, ".claude");
     case "codex": return codexConfigDir();
+    case "antigravity": return antigravityConfigDir();
+    case "gemini": return geminiConfigDir();
+    case "cline": return clineConfigDir();
+    case "roo-code": return rooCodeConfigDir();
+    case "continue": return continueConfigDir();
+    case "aider": return aiderConfigDir();
+    case "opencode": return opencodeConfigDir();
+    case "zed": return zedConfigDir();
+    case "jetbrains": return jetbrainsConfigDir();
     case "cursor": return join(home, ".cursor");
     case "windsurf": return home;
     case "copilot": return join(home, ".github");

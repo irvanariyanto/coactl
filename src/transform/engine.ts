@@ -1,12 +1,32 @@
 import type { Adapter, AdapterContext } from "../adapters/types.js";
 import { ClaudeCodeAdapter } from "../adapters/claude-code.js";
 import { CodexAdapter } from "../adapters/codex.js";
+import { AntigravityAdapter } from "../adapters/antigravity.js";
+import { GeminiAdapter } from "../adapters/gemini.js";
+import { ClineAdapter } from "../adapters/cline.js";
+import { RooCodeAdapter } from "../adapters/roo-code.js";
+import { ContinueAdapter } from "../adapters/continue.js";
+import { AiderAdapter } from "../adapters/aider.js";
+import { OpenCodeAdapter } from "../adapters/opencode.js";
+import { ZedAdapter } from "../adapters/zed.js";
+import { JetBrainsAdapter } from "../adapters/jetbrains.js";
 import { CursorAdapter } from "../adapters/cursor.js";
 import { WindsurfAdapter } from "../adapters/windsurf.js";
 import { CopilotAdapter } from "../adapters/copilot.js";
 import { capabilityFor } from "../adapters/capability-matrix.js";
 import { createDiagnostic, degradedWarning, skipNotice, type Diagnostic } from "./diagnostics.js";
-import { codexConfigDir } from "../io/global-paths.js";
+import {
+  aiderConfigDir,
+  antigravityConfigDir,
+  clineConfigDir,
+  codexConfigDir,
+  continueConfigDir,
+  geminiConfigDir,
+  jetbrainsConfigDir,
+  opencodeConfigDir,
+  rooCodeConfigDir,
+  zedConfigDir,
+} from "../io/global-paths.js";
 import type { Registry } from "../registry/types.js";
 import type { Manifest } from "../schema/index.js";
 import type { EmittedFile } from "../adapters/types.js";
@@ -30,6 +50,24 @@ function getAdapter(target: Target): Adapter {
       return new ClaudeCodeAdapter();
     case "codex":
       return new CodexAdapter();
+    case "antigravity":
+      return new AntigravityAdapter();
+    case "gemini":
+      return new GeminiAdapter();
+    case "cline":
+      return new ClineAdapter();
+    case "roo-code":
+      return new RooCodeAdapter();
+    case "continue":
+      return new ContinueAdapter();
+    case "aider":
+      return new AiderAdapter();
+    case "opencode":
+      return new OpenCodeAdapter();
+    case "zed":
+      return new ZedAdapter();
+    case "jetbrains":
+      return new JetBrainsAdapter();
     case "cursor":
       return new CursorAdapter();
     case "windsurf":
@@ -48,7 +86,18 @@ export function transform(registry: Registry, manifest: Manifest, options: Trans
   const filterTargets = options.targets ? new Set(options.targets) : null;
   const context: AdapterContext = {
     scope: options.scope ?? "project",
-    ...(options.scope === "global" ? { codexHome: codexConfigDir() } : {}),
+    ...(options.scope === "global" ? {
+      aiderHome: aiderConfigDir(),
+      antigravityHome: antigravityConfigDir(),
+      clineHome: clineConfigDir(),
+      codexHome: codexConfigDir(),
+      continueHome: continueConfigDir(),
+      geminiHome: geminiConfigDir(),
+      jetbrainsHome: jetbrainsConfigDir(),
+      opencodeHome: opencodeConfigDir(),
+      rooCodeHome: rooCodeConfigDir(),
+      zedHome: zedConfigDir(),
+    } : {}),
   };
 
   for (const resolved of allAssets) {

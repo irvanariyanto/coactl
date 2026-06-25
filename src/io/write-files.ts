@@ -2,7 +2,18 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { basename, dirname, join, resolve } from "node:path";
 import type { EmittedFile } from "../adapters/types.js";
 import type { Target } from "../schema/index.js";
-import { codexConfigDir } from "./global-paths.js";
+import {
+  aiderConfigDir,
+  antigravityConfigDir,
+  clineConfigDir,
+  codexConfigDir,
+  continueConfigDir,
+  geminiConfigDir,
+  jetbrainsConfigDir,
+  opencodeConfigDir,
+  rooCodeConfigDir,
+  zedConfigDir,
+} from "./global-paths.js";
 
 export interface WriteSummary {
   written: number;
@@ -13,6 +24,8 @@ export interface WriteSummary {
 // Files that should be merged rather than replaced
 export const MANAGED_AGGREGATE_FILES = new Set([
   "CLAUDE.md",
+  "GEMINI.md",
+  "CONVENTIONS.md",
   ".windsurfrules",
   ".github/copilot-instructions.md",
 ]);
@@ -165,6 +178,54 @@ function targetLocations(options: PruneOptions, target: Target): { dirs: string[
           ...(options.scope === "global" ? [join(codexConfigDir(), "prompts")] : []),
         ],
         aggregateFiles: [options.scope === "global" ? join(codexConfigDir(), "AGENTS.md") : join(root, "AGENTS.md")],
+      };
+    case "antigravity":
+      return {
+        dirs: [
+          options.scope === "global" ? join(antigravityConfigDir(), "skills") : join(root, ".antigravity", "skills"),
+          options.scope === "global" ? join(antigravityConfigDir(), "commands") : join(root, ".antigravity", "commands"),
+        ],
+        aggregateFiles: [options.scope === "global" ? join(antigravityConfigDir(), "AGENTS.md") : join(root, "AGENTS.md")],
+      };
+    case "gemini":
+      return {
+        dirs: [options.scope === "global" ? join(geminiConfigDir(), "skills") : join(root, ".gemini", "skills")],
+        aggregateFiles: [options.scope === "global" ? join(geminiConfigDir(), "GEMINI.md") : join(root, "GEMINI.md")],
+      };
+    case "cline":
+      return {
+        dirs: [options.scope === "global" ? join(clineConfigDir(), "Rules") : join(root, ".clinerules")],
+        aggregateFiles: [],
+      };
+    case "roo-code":
+      return {
+        dirs: [options.scope === "global" ? join(rooCodeConfigDir(), "rules") : join(root, ".roo", "rules")],
+        aggregateFiles: [],
+      };
+    case "continue":
+      return {
+        dirs: [options.scope === "global" ? join(continueConfigDir(), "rules") : join(root, ".continue", "rules")],
+        aggregateFiles: [],
+      };
+    case "aider":
+      return {
+        dirs: [],
+        aggregateFiles: [options.scope === "global" ? join(aiderConfigDir(), "CONVENTIONS.md") : join(root, "CONVENTIONS.md")],
+      };
+    case "opencode":
+      return {
+        dirs: [options.scope === "global" ? join(opencodeConfigDir(), "skills") : join(root, ".opencode", "skills")],
+        aggregateFiles: [options.scope === "global" ? join(opencodeConfigDir(), "AGENTS.md") : join(root, "AGENTS.md")],
+      };
+    case "zed":
+      return {
+        dirs: [options.scope === "global" ? join(zedConfigDir(), "skills") : join(root, ".agents", "skills")],
+        aggregateFiles: [options.scope === "global" ? join(zedConfigDir(), "AGENTS.md") : join(root, "AGENTS.md")],
+      };
+    case "jetbrains":
+      return {
+        dirs: [options.scope === "global" ? join(jetbrainsConfigDir(), "rules") : join(root, ".aiassistant", "rules")],
+        aggregateFiles: [],
       };
     case "cursor":
       return { dirs: [join(root, ".cursor", "rules")], aggregateFiles: [] };

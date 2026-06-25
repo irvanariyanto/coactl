@@ -29,6 +29,15 @@ type ScopeData = Pick<DashboardData, "assets" | "sources" | "conflicts" | "outpu
 const TARGET_LABEL: Record<Target, string> = {
   "claude-code": "Claude Code",
   codex: "Codex",
+  antigravity: "Antigravity",
+  gemini: "Gemini CLI",
+  cline: "Cline",
+  "roo-code": "Roo Code",
+  continue: "Continue",
+  aider: "Aider",
+  opencode: "OpenCode",
+  zed: "Zed",
+  jetbrains: "JetBrains AI",
   cursor: "Cursor",
   windsurf: "Windsurf",
   copilot: "GitHub Copilot",
@@ -67,6 +76,15 @@ function targetBasePath(target: Target, scope: "global" | "project", rootDir: st
   switch (target) {
     case "claude-code": return join(rootDir, ".claude");
     case "codex": return rootDir;
+    case "antigravity": return join(rootDir, ".antigravity");
+    case "gemini": return join(rootDir, ".gemini");
+    case "cline": return join(rootDir, ".clinerules");
+    case "roo-code": return join(rootDir, ".roo");
+    case "continue": return join(rootDir, ".continue");
+    case "aider": return join(rootDir, "CONVENTIONS.md");
+    case "opencode": return join(rootDir, ".opencode");
+    case "zed": return join(rootDir, ".agents");
+    case "jetbrains": return join(rootDir, ".aiassistant");
     case "cursor": return join(rootDir, ".cursor");
     case "windsurf": return join(rootDir, ".windsurfrules");
     case "copilot": return join(rootDir, ".github");
@@ -147,7 +165,7 @@ function buildTools(assets: DashboardAsset[], scope: "global" | "project", rootD
     return {
       id: target,
       label: TARGET_LABEL[target],
-      state: targeted.length > 0 ? "configured" : "available",
+      state: "configured",
       targetPath: targetBasePath(target, scope, rootDir),
       assetCount: targeted.length,
       nativeCount,
@@ -155,8 +173,8 @@ function buildTools(assets: DashboardAsset[], scope: "global" | "project", rootD
       skippedCount,
       scopes: [scope],
       note: targeted.length > 0
-        ? "This tool is referenced by one or more asset targets."
-        : "Add this target to an asset to start syncing generated files for it.",
+        ? "This supported tool is connected and referenced by one or more asset targets."
+        : "This supported tool is connected. Add this target to an asset to generate files for it.",
     };
   });
 }
@@ -169,7 +187,7 @@ function mergeTools(globalTools: DashboardTool[], projectTools: DashboardTool[] 
     const assetCount = matches.reduce((sum, tool) => sum + tool.assetCount, 0);
     return {
       ...first,
-      state: assetCount > 0 ? "configured" : "available",
+      state: "configured",
       targetPath: matches.map((tool) => `${tool.scopes[0]}:${tool.targetPath}`).join(" | "),
       assetCount,
       nativeCount: matches.reduce((sum, tool) => sum + tool.nativeCount, 0),

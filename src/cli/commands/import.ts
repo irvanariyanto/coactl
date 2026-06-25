@@ -4,12 +4,53 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { basename, join } from "node:path";
 import { homedir } from "node:os";
 import { renderClaudeAssetFrontmatter } from "../../scaffold/templates.js";
-import { codexConfigDir, globalConfigDir } from "../../io/global-paths.js";
+import {
+  aiderConfigDir,
+  antigravityConfigDir,
+  clineConfigDir,
+  codexConfigDir,
+  continueConfigDir,
+  geminiConfigDir,
+  globalConfigDir,
+  jetbrainsConfigDir,
+  opencodeConfigDir,
+  rooCodeConfigDir,
+  zedConfigDir,
+} from "../../io/global-paths.js";
 import { BRAND } from "../../tui/theme.js";
 import type { AssetKind } from "../../schema/index.js";
 
-export type ToolSource = "claude-code" | "codex" | "cursor" | "windsurf" | "copilot";
-const VALID_SOURCES: ToolSource[] = ["claude-code", "codex", "cursor", "windsurf", "copilot"];
+export type ToolSource =
+  | "claude-code"
+  | "codex"
+  | "antigravity"
+  | "gemini"
+  | "cline"
+  | "roo-code"
+  | "continue"
+  | "aider"
+  | "opencode"
+  | "zed"
+  | "jetbrains"
+  | "cursor"
+  | "windsurf"
+  | "copilot";
+const VALID_SOURCES: ToolSource[] = [
+  "claude-code",
+  "codex",
+  "antigravity",
+  "gemini",
+  "cline",
+  "roo-code",
+  "continue",
+  "aider",
+  "opencode",
+  "zed",
+  "jetbrains",
+  "cursor",
+  "windsurf",
+  "copilot",
+];
 
 export interface ImportedAsset {
   id: string;
@@ -23,6 +64,15 @@ function sourcePath(tool: ToolSource, global?: boolean): string {
   switch (tool) {
     case "claude-code": return join(base, ".claude");
     case "codex":       return global ? codexConfigDir() : process.cwd();
+    case "antigravity": return global ? antigravityConfigDir() : process.cwd();
+    case "gemini":      return global ? geminiConfigDir() : process.cwd();
+    case "cline":       return global ? join(clineConfigDir(), "Rules") : join(process.cwd(), ".clinerules");
+    case "roo-code":    return global ? join(rooCodeConfigDir(), "rules") : join(process.cwd(), ".roo", "rules");
+    case "continue":    return global ? join(continueConfigDir(), "rules") : join(process.cwd(), ".continue", "rules");
+    case "aider":       return global ? join(aiderConfigDir(), "CONVENTIONS.md") : join(process.cwd(), "CONVENTIONS.md");
+    case "opencode":    return global ? opencodeConfigDir() : process.cwd();
+    case "zed":         return global ? zedConfigDir() : process.cwd();
+    case "jetbrains":   return global ? join(jetbrainsConfigDir(), "rules") : join(process.cwd(), ".aiassistant", "rules");
     case "cursor":      return join(base, ".cursor", "rules");
     case "windsurf":    return join(base, ".windsurfrules");
     case "copilot":     return join(base, ".github", "copilot-instructions.md");
@@ -32,6 +82,15 @@ function sourcePath(tool: ToolSource, global?: boolean): string {
 const SOURCE_REL: Record<ToolSource, string> = {
   "claude-code": ".claude/{skills,commands,rules}/",
   "codex": "AGENTS.md, .agents/skills/, CODEX_HOME/prompts/",
+  "antigravity": "AGENTS.md, .antigravity/skills/, .antigravity/commands/",
+  "gemini": "GEMINI.md, .gemini/skills/",
+  "cline": ".clinerules/",
+  "roo-code": ".roo/rules/",
+  "continue": ".continue/rules/",
+  "aider": "CONVENTIONS.md",
+  "opencode": "AGENTS.md, .opencode/skills/",
+  "zed": "AGENTS.md, .agents/skills/",
+  "jetbrains": ".aiassistant/rules/",
   "cursor": ".cursor/rules/",
   "windsurf": ".windsurfrules",
   "copilot": ".github/copilot-instructions.md",
@@ -44,6 +103,20 @@ export function sourceHint(tool: ToolSource, global?: boolean): string {
     return global
       ? "~/.agents/skills/, CODEX_HOME/AGENTS.md, CODEX_HOME/prompts/"
       : ".agents/skills/, AGENTS.md";
+  }
+  if (tool === "antigravity") {
+    return global
+      ? "ANTIGRAVITY_HOME/skills/, ANTIGRAVITY_HOME/commands/, ANTIGRAVITY_HOME/AGENTS.md"
+      : ".antigravity/skills/, .antigravity/commands/, AGENTS.md";
+  }
+  if (tool === "gemini") {
+    return global ? "GEMINI_HOME/skills/, GEMINI_HOME/GEMINI.md" : ".gemini/skills/, GEMINI.md";
+  }
+  if (tool === "opencode") {
+    return global ? "OPENCODE_HOME/skills/, OPENCODE_HOME/AGENTS.md" : ".opencode/skills/, AGENTS.md";
+  }
+  if (tool === "zed") {
+    return global ? "ZED_HOME/skills/, ZED_HOME/AGENTS.md" : ".agents/skills/, AGENTS.md";
   }
   return (global ? "~/" : "") + SOURCE_REL[tool];
 }
@@ -83,6 +156,47 @@ function extractCoactlBlocks(content: string): Array<{ id: string; body: string 
     blocks.push({ id: match[1], body: stripCoactlHeader(match[2].trim()) });
   }
   return blocks;
+}
+
+function listSkillDir(skillsDir: string): ImportedAsset[] {
+  if (!existsSync(skillsDir)) return [];
+  const assets: ImportedAsset[] = [];
+  for (const name of readdirSync(skillsDir)) {
+    const dir = join(skillsDir, name);
+    const file = join(dir, "SKILL.md");
+    if (!existsSync(dir) || !statSync(dir).isDirectory() || !existsSync(file)) continue;
+    const raw = readFileSync(file, "utf-8");
+    assets.push({
+      id: name,
+      kind: "skill",
+      body: stripCoactlHeader(stripYamlFrontmatter(raw)),
+      description: extractDescription(raw),
+    });
+  }
+  return assets;
+}
+
+function listMarkdownRuleDir(rulesDir: string, kind: AssetKind = "rule"): ImportedAsset[] {
+  if (!existsSync(rulesDir)) return [];
+  return readdirSync(rulesDir)
+    .filter((file) => file.endsWith(".md"))
+    .map((file) => {
+      const raw = readFileSync(join(rulesDir, file), "utf-8");
+      return {
+        id: basename(file, ".md"),
+        kind,
+        body: stripCoactlHeader(stripYamlFrontmatter(raw)),
+        description: extractDescription(raw),
+      };
+    });
+}
+
+function listAggregateRule(filePath: string, fallbackId: string): ImportedAsset[] {
+  if (!existsSync(filePath)) return [];
+  const raw = readFileSync(filePath, "utf-8");
+  const blocks = extractCoactlBlocks(raw);
+  if (blocks.length > 0) return blocks.map((block) => ({ ...block, kind: "rule" as AssetKind }));
+  return raw.trim().length > 0 ? [{ id: fallbackId, kind: "rule", body: raw.trimStart() }] : [];
 }
 
 export function listAssets(tool: ToolSource, global?: boolean): ImportedAsset[] {
@@ -182,6 +296,102 @@ export function listAssets(tool: ToolSource, global?: boolean): ImportedAsset[] 
     return assets;
   }
 
+  if (tool === "antigravity") {
+    const assets: ImportedAsset[] = [];
+    const base = global ? antigravityConfigDir() : process.cwd();
+    const skillsDir = global
+      ? join(antigravityConfigDir(), "skills")
+      : join(process.cwd(), ".antigravity", "skills");
+
+    if (existsSync(skillsDir)) {
+      for (const name of readdirSync(skillsDir)) {
+        const dir = join(skillsDir, name);
+        const file = join(dir, "SKILL.md");
+        if (!existsSync(dir) || !statSync(dir).isDirectory() || !existsSync(file)) continue;
+        const raw = readFileSync(file, "utf-8");
+        assets.push({
+          id: name,
+          kind: "skill",
+          body: stripCoactlHeader(stripYamlFrontmatter(raw)),
+          description: extractDescription(raw),
+        });
+      }
+    }
+
+    const commandsDir = global
+      ? join(antigravityConfigDir(), "commands")
+      : join(process.cwd(), ".antigravity", "commands");
+    if (existsSync(commandsDir)) {
+      for (const file of readdirSync(commandsDir)) {
+        if (!file.endsWith(".md")) continue;
+        const raw = readFileSync(join(commandsDir, file), "utf-8");
+        assets.push({
+          id: basename(file, ".md"),
+          kind: "command",
+          body: stripCoactlHeader(stripYamlFrontmatter(raw)),
+          description: extractDescription(raw),
+        });
+      }
+    }
+
+    const agentsFile = join(base, "AGENTS.md");
+    if (existsSync(agentsFile)) {
+      const raw = readFileSync(agentsFile, "utf-8");
+      const blocks = extractCoactlBlocks(raw);
+      if (blocks.length > 0) {
+        assets.push(...blocks.map((block) => ({ ...block, kind: "rule" as AssetKind })));
+      } else if (raw.trim().length > 0) {
+        assets.push({ id: "antigravity-agents", kind: "rule", body: raw.trimStart() });
+      }
+    }
+
+    return assets;
+  }
+
+  if (tool === "gemini") {
+    const base = global ? geminiConfigDir() : process.cwd();
+    return [
+      ...listSkillDir(global ? join(geminiConfigDir(), "skills") : join(process.cwd(), ".gemini", "skills")),
+      ...listAggregateRule(join(base, "GEMINI.md"), "gemini-instructions"),
+    ];
+  }
+
+  if (tool === "cline") {
+    return listMarkdownRuleDir(path, "rule");
+  }
+
+  if (tool === "roo-code") {
+    return listMarkdownRuleDir(path, "rule");
+  }
+
+  if (tool === "continue") {
+    return listMarkdownRuleDir(path, "rule");
+  }
+
+  if (tool === "aider") {
+    return listAggregateRule(path, "aider-conventions");
+  }
+
+  if (tool === "opencode") {
+    const base = global ? opencodeConfigDir() : process.cwd();
+    return [
+      ...listSkillDir(global ? join(opencodeConfigDir(), "skills") : join(process.cwd(), ".opencode", "skills")),
+      ...listAggregateRule(join(base, "AGENTS.md"), "opencode-agents"),
+    ];
+  }
+
+  if (tool === "zed") {
+    const base = global ? zedConfigDir() : process.cwd();
+    return [
+      ...listSkillDir(global ? join(zedConfigDir(), "skills") : join(process.cwd(), ".agents", "skills")),
+      ...listAggregateRule(join(base, "AGENTS.md"), "zed-agents"),
+    ];
+  }
+
+  if (tool === "jetbrains") {
+    return listMarkdownRuleDir(path, "rule");
+  }
+
   if (tool === "cursor") {
     if (!existsSync(path)) return [];
     return readdirSync(path)
@@ -256,6 +466,15 @@ export async function importAction(
       options: [
         { value: "claude-code", label: "Claude Code", hint: sourceHint("claude-code", options.global) },
         { value: "codex",       label: "Codex",       hint: sourceHint("codex", options.global) },
+        { value: "antigravity", label: "Antigravity", hint: sourceHint("antigravity", options.global) },
+        { value: "gemini",      label: "Gemini CLI",  hint: sourceHint("gemini", options.global) },
+        { value: "cline",       label: "Cline",       hint: sourceHint("cline", options.global) },
+        { value: "roo-code",    label: "Roo Code",    hint: sourceHint("roo-code", options.global) },
+        { value: "continue",    label: "Continue",    hint: sourceHint("continue", options.global) },
+        { value: "aider",       label: "Aider",       hint: sourceHint("aider", options.global) },
+        { value: "opencode",    label: "OpenCode",    hint: sourceHint("opencode", options.global) },
+        { value: "zed",         label: "Zed",         hint: sourceHint("zed", options.global) },
+        { value: "jetbrains",   label: "JetBrains AI", hint: sourceHint("jetbrains", options.global) },
         { value: "cursor",      label: "Cursor",      hint: sourceHint("cursor", options.global) },
         { value: "windsurf",    label: "Windsurf",    hint: sourceHint("windsurf", options.global) },
         { value: "copilot",     label: "Copilot",     hint: sourceHint("copilot", options.global) },

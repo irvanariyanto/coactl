@@ -13,6 +13,15 @@ export interface EmittedFile {
 export interface AdapterContext {
   scope: "project" | "global";
   codexHome?: string;
+  antigravityHome?: string;
+  geminiHome?: string;
+  clineHome?: string;
+  rooCodeHome?: string;
+  continueHome?: string;
+  aiderHome?: string;
+  opencodeHome?: string;
+  zedHome?: string;
+  jetbrainsHome?: string;
 }
 
 export interface Adapter {

@@ -42,7 +42,7 @@ export const commandSpecs: CommandSpec[] = [
     configure: (cmd) => {
       cmd
         .argument("[id]", "asset id to import")
-        .option("--from <tool>", "source tool: claude-code|codex|cursor|windsurf|copilot (default: claude-code)")
+        .option("--from <tool>", "source tool: claude-code|codex|antigravity|gemini|cline|roo-code|continue|aider|opencode|zed|jetbrains|cursor|windsurf|copilot (default: claude-code)")
         .option("--all", "import all assets from the source")
         .option("--global", "import from/to global scope")
         .option("--force", "overwrite existing assets")
@@ -104,10 +104,10 @@ export const commandSpecs: CommandSpec[] = [
   },
   {
     name: "sync",
-    description: "Write native config files for all configured AI tools (claude-code, codex, cursor, windsurf, copilot)",
+    description: "Write native config files for all configured AI tools",
     configure: (cmd) => {
       addManifestScopeOptions(cmd, "sync global scope")
-        .option("--target <tool>", "limit sync to one target: claude-code|codex|cursor|windsurf|copilot")
+        .option("--target <tool>", "limit sync to one target")
         .option("--kind <kind>", "limit sync to one kind: skill|command|rule|workflow")
         .option("--strict", "fail when any selected asset is degraded or unsupported")
         .option("--prune", "remove stale Coactl-managed output for selected targets")

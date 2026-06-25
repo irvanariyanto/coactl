@@ -30,6 +30,25 @@ describe("CAPABILITY_MATRIX", () => {
     expect(CAPABILITY_MATRIX.codex.workflow).toBe("skip");
   });
 
+  it("antigravity: skill/rule=native, command=degraded, workflow=skip", () => {
+    expect(CAPABILITY_MATRIX.antigravity.skill).toBe("native");
+    expect(CAPABILITY_MATRIX.antigravity.rule).toBe("native");
+    expect(CAPABILITY_MATRIX.antigravity.command).toBe("degraded");
+    expect(CAPABILITY_MATRIX.antigravity.workflow).toBe("skip");
+  });
+
+  it("new rule-first targets expose documented native/degraded mappings", () => {
+    expect(CAPABILITY_MATRIX.gemini.skill).toBe("native");
+    expect(CAPABILITY_MATRIX.gemini.rule).toBe("native");
+    expect(CAPABILITY_MATRIX.cline.rule).toBe("native");
+    expect(CAPABILITY_MATRIX["roo-code"].rule).toBe("native");
+    expect(CAPABILITY_MATRIX.continue.rule).toBe("native");
+    expect(CAPABILITY_MATRIX.aider.rule).toBe("degraded");
+    expect(CAPABILITY_MATRIX.opencode.skill).toBe("native");
+    expect(CAPABILITY_MATRIX.zed.skill).toBe("native");
+    expect(CAPABILITY_MATRIX.jetbrains.rule).toBe("native");
+  });
+
   it("cursor: skill=degraded, command=degraded, rule=native, workflow=skip", () => {
     expect(CAPABILITY_MATRIX["cursor"]["skill"]).toBe("degraded");
     expect(CAPABILITY_MATRIX["cursor"]["command"]).toBe("degraded");

@@ -164,6 +164,15 @@ const CAPABILITY_COLOR = {
 const TARGET_LABEL: Record<Target, string> = {
   "claude-code": "Claude Code",
   codex: "Codex",
+  antigravity: "Antigravity",
+  gemini: "Gemini CLI",
+  cline: "Cline",
+  "roo-code": "Roo Code",
+  continue: "Continue",
+  aider: "Aider",
+  opencode: "OpenCode",
+  zed: "Zed",
+  jetbrains: "JetBrains AI",
   cursor: "Cursor",
   windsurf: "Windsurf",
   copilot: "GitHub Copilot",
@@ -989,11 +998,11 @@ function DashboardHome({
         </Box>
         <Box marginTop={1} flexDirection="column">
           <Text bold>Connected Tools</Text>
-          <Text dimColor>Only tools targeted by current assets are counted here.</Text>
+          <Text dimColor>All supported tool adapters are counted here. Asset counts show current target usage.</Text>
           {connectedTools.length === 0 ? (
-            <Text dimColor>No target tools are referenced yet. Add targets to assets or import existing tool files.</Text>
+            <Text dimColor>No supported tools are available.</Text>
           ) : (
-            connectedTools.slice(0, 5).map((tool) => (
+            connectedTools.slice(0, Math.max(1, height - 18)).map((tool) => (
               <Box key={tool.id} gap={1}>
                 <Text color={tool.state === "configured" ? "green" : "gray"}>{tool.state === "configured" ? "●" : "○"}</Text>
                 <Text>{truncate(tool.label, 16)}</Text>

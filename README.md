@@ -28,6 +28,14 @@
   .coactl/rules/
     my-rule/RULE.md      ──►  .claude/        (Claude Code)
                          ──►  .agents/skills/ (Codex)
+                         ──►  .antigravity/   (Antigravity)
+                         ──►  .gemini/        (Gemini CLI)
+                         ──►  .clinerules/    (Cline)
+                         ──►  .roo/rules/     (Roo Code)
+                         ──►  .continue/      (Continue)
+                         ──►  CONVENTIONS.md  (Aider)
+                         ──►  .opencode/      (OpenCode)
+                         ──►  .aiassistant/   (JetBrains AI)
                          ──►  .cursor/rules/  (Cursor)
                          ──►  .windsurfrules  (Windsurf)
                          ──►  .github/        (Copilot)
@@ -109,7 +117,7 @@ All commands support `--global`. Without it, commands read and write inside the 
 |------|---------|
 | `~/.config/coactl/agent.manifest.yaml` | Global manifest (sources, overrides) |
 | `~/.config/coactl/{skills,commands,rules,workflows}/` | Global canonical asset definitions |
-| `~/.claude/`, `~/.agents/skills/`, `~/.codex/`, `~/.cursor/`, … | Tool-specific output (written by `sync --global`) |
+| `~/.claude/`, `~/.agents/skills/`, `~/.codex/`, `~/.antigravity/`, `~/.gemini/`, `~/.cursor/`, … | Tool-specific output (written by `sync --global`) |
 
 ---
 
@@ -128,12 +136,20 @@ Each asset has a `kind` that determines how adapters emit it:
 
 ### Tool compatibility matrix
 
-| Kind | Claude Code | Codex | Cursor | Windsurf | Copilot |
-|------|:-----------:|:-----:|:------:|:--------:|:-------:|
-| `rule` | ✅ native | ✅ native | ✅ native | ✅ native | ✅ native |
-| `skill` | ✅ native | ✅ native | ⚠️ degraded | ⚠️ degraded | ⚠️ degraded |
-| `command` | ✅ native | ⚠️ global only | ⚠️ degraded | ➖ skip | ➖ skip |
-| `workflow` | ✅ native | ➖ skip | ➖ skip | ➖ skip | ➖ skip |
+| Kind | Native support |
+|------|----------------|
+| `rule` | Claude Code, Codex, Antigravity, Gemini CLI, Cline, Roo Code, Continue, OpenCode, Zed, JetBrains AI, Cursor, Windsurf, Copilot |
+| `skill` | Claude Code, Codex, Antigravity, Gemini CLI, OpenCode, Zed |
+| `command` | Claude Code; Codex global prompts; Antigravity best-effort markdown; Cursor best-effort rule |
+| `workflow` | Claude Code |
+
+Degraded mappings:
+
+| Kind | Degraded targets |
+|------|------------------|
+| `rule` | Aider (`CONVENTIONS.md`) |
+| `skill` | Cline, Roo Code, Continue, JetBrains AI, Cursor, Windsurf, Copilot |
+| `command` | Codex global only, Antigravity, Cursor |
 
 ✅ native · ⚠️ best-effort with warning · ➖ skipped with notice
 
@@ -218,6 +234,10 @@ Write native files to disk for all configured tools.
 coactl sync                      # all targets, project scope
 coactl sync --target cursor      # one tool only
 coactl sync --target codex       # Codex skills and project AGENTS.md rules
+coactl sync --target antigravity # Antigravity skills, commands, and AGENTS.md rules
+coactl sync --target gemini      # Gemini skills and GEMINI.md rules
+coactl sync --target cline       # Cline .clinerules output
+coactl sync --target opencode    # OpenCode skills and AGENTS.md rules
 coactl sync --kind rule          # one kind only
 coactl sync --global             # write to ~/.claude/, ~/.cursor/, …
 coactl sync --global --strict    # fail if any mapping is degraded or skipped
@@ -239,6 +259,19 @@ coactl import --all --global       # from ~/.claude/skills/ → ~/.config/coactl
 # Cursor rules
 coactl import --from cursor my-rule
 coactl import --from cursor --all
+
+# Antigravity skills, commands, and AGENTS.md rules
+coactl import --from antigravity --all
+
+# Other tools
+coactl import --from gemini --all
+coactl import --from cline --all
+coactl import --from roo-code --all
+coactl import --from continue --all
+coactl import --from aider --all
+coactl import --from opencode --all
+coactl import --from zed --all
+coactl import --from jetbrains --all
 
 # Windsurf / Copilot (splits coactl-managed blocks; falls back to one rule)
 coactl import --from windsurf --all

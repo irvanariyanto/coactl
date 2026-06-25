@@ -3,7 +3,22 @@ import { z } from "zod";
 export const ASSET_KINDS = ["skill", "command", "rule", "workflow"] as const;
 export type AssetKind = (typeof ASSET_KINDS)[number];
 
-export const SUPPORTED_TARGETS = ["claude-code", "codex", "cursor", "windsurf", "copilot"] as const;
+export const SUPPORTED_TARGETS = [
+  "claude-code",
+  "codex",
+  "antigravity",
+  "gemini",
+  "cline",
+  "roo-code",
+  "continue",
+  "aider",
+  "opencode",
+  "zed",
+  "jetbrains",
+  "cursor",
+  "windsurf",
+  "copilot",
+] as const;
 export type Target = (typeof SUPPORTED_TARGETS)[number];
 
 const KEBAB_CASE_REGEX = /^[a-z0-9]+(-[a-z0-9]+)*$/;

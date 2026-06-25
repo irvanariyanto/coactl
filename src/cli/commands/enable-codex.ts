@@ -16,7 +16,22 @@ const KIND_DIRS: Array<{ subdir: string; file: string; kind: AssetKind }> = [
   { subdir: "rules", file: "RULE.md", kind: "rule" },
 ];
 
-const TARGET_ORDER: Target[] = ["claude-code", "codex", "cursor", "windsurf", "copilot"];
+const TARGET_ORDER: Target[] = [
+  "claude-code",
+  "codex",
+  "antigravity",
+  "gemini",
+  "cline",
+  "roo-code",
+  "continue",
+  "aider",
+  "opencode",
+  "zed",
+  "jetbrains",
+  "cursor",
+  "windsurf",
+  "copilot",
+];
 
 interface MigrationCounts {
   updated: number;
