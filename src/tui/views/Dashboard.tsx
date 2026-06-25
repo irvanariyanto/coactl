@@ -245,6 +245,7 @@ function assetTargetSyncLabel(asset: DashboardAsset, target: Target, tools?: Das
 }
 
 function toolEnableState(tool: DashboardTool): { label: "enabled" | "partial" | "disabled" | "unsupported"; color: string; nextEnable: boolean } {
+  if (tool.state !== "configured") return { label: "unsupported", color: "gray", nextEnable: false };
   if (tool.compatibleAssetCount === 0) return { label: "unsupported", color: "gray", nextEnable: true };
   if (tool.assetCount === 0) return { label: "disabled", color: "gray", nextEnable: true };
   if (tool.assetCount >= tool.compatibleAssetCount) return { label: "enabled", color: "green", nextEnable: false };

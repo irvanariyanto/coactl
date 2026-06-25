@@ -505,6 +505,14 @@ export async function buildDashboardProps(options: { global?: boolean; project?:
   };
 
   const onToggleTool = async (target: Target, enable: boolean, scopeFilter: DashboardScopeFilter): Promise<{ updated: number; errors: string[] }> => {
+    // Enabling an uninstalled tool would add targets to manifests that coactl would
+    // never emit files for (transform only emits for installed targets). Reject early.
+    if (enable) {
+      const installedTargets = detectInstalledTargets();
+      if (!installedTargets.includes(target)) {
+        return { updated: 0, errors: [`Cannot enable ${TARGET_LABEL[target]}: tool is not installed on this device.`] };
+      }
+    }
     const jobs: Array<Promise<{ updated: number; errors: string[] }>> = [];
     if (scopeFilter !== "project") {
       jobs.push((async () => {
