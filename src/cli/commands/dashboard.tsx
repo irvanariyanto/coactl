@@ -22,6 +22,7 @@ import type { ImportTool, ImportCandidate } from "../../tui/components/ImportVie
 import { SUPPORTED_TARGETS, type Target } from "../../schema/index.js";
 import type { SourceConfig } from "../../schema/manifest.js";
 import { detectInstalledTargets, toolInstallInfo } from "../../tools/detect.js";
+import { updateLocalAssetTargets } from "../../registry/target-updates.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -154,6 +155,7 @@ function buildWorkspace(
 function buildTools(assets: DashboardAsset[], scope: "global" | "project", rootDir: string): DashboardTool[] {
   return SUPPORTED_TARGETS.map((target) => {
     const targeted = assets.filter((asset) => asset.targets.includes(target));
+    const compatibleAssets = assets.filter((asset) => capabilityFor(target, asset.kind, scope) !== "skip");
     const installInfo = toolInstallInfo(target);
     const installed = installInfo.installed;
     let importableCount = 0;
@@ -181,6 +183,7 @@ function buildTools(assets: DashboardAsset[], scope: "global" | "project", rootD
       installReason: installInfo.reason,
       importableCount,
       assetCount: targeted.length,
+      compatibleAssetCount: compatibleAssets.length,
       nativeCount,
       degradedCount,
       skippedCount,
@@ -207,6 +210,7 @@ function mergeTools(globalTools: DashboardTool[], projectTools: DashboardTool[] 
       installReason: matches.find((tool) => tool.installReason)?.installReason,
       importableCount: matches.reduce((sum, tool) => sum + (tool.importableCount ?? 0), 0),
       assetCount,
+      compatibleAssetCount: matches.reduce((sum, tool) => sum + tool.compatibleAssetCount, 0),
       nativeCount: matches.reduce((sum, tool) => sum + tool.nativeCount, 0),
       degradedCount: matches.reduce((sum, tool) => sum + tool.degradedCount, 0),
       skippedCount: matches.reduce((sum, tool) => sum + tool.skippedCount, 0),
@@ -500,6 +504,37 @@ export async function buildDashboardProps(options: { global?: boolean; project?:
     };
   };
 
+  const onToggleTool = async (target: Target, enable: boolean, scopeFilter: DashboardScopeFilter): Promise<{ updated: number; errors: string[] }> => {
+    const jobs: Array<Promise<{ updated: number; errors: string[] }>> = [];
+    if (scopeFilter !== "project") {
+      jobs.push((async () => {
+        try {
+          const manifest = loadManifest(globalPath);
+          const result = updateLocalAssetTargets({ manifestPath: globalPath, manifest, scope: "global", targets: [target], enable });
+          return { updated: result.updated, errors: [] };
+        } catch (err) {
+          return { updated: 0, errors: [(err as Error).message] };
+        }
+      })());
+    }
+    if (isProject && scopeFilter !== "global") {
+      jobs.push((async () => {
+        try {
+          const manifest = loadManifest(projectManifestFound!);
+          const result = updateLocalAssetTargets({ manifestPath: projectManifestFound!, manifest, scope: "project", targets: [target], enable });
+          return { updated: result.updated, errors: [] };
+        } catch (err) {
+          return { updated: 0, errors: [(err as Error).message] };
+        }
+      })());
+    }
+    const results = await Promise.all(jobs);
+    return {
+      updated: results.reduce((sum, result) => sum + result.updated, 0),
+      errors: results.flatMap((result) => result.errors),
+    };
+  };
+
   // Default when the dashboard's scope filter is "all": mirrors the CLI's import command
   // (project-relative unless --global). When the filter is set to "global" or "project",
   // Dashboard passes that choice through explicitly instead — see effectiveImportGlobal.
@@ -548,6 +583,7 @@ export async function buildDashboardProps(options: { global?: boolean; project?:
     onSync,
     onRefresh,
     onUpdate,
+    onToggleTool,
     onListImportAssets,
     onImport,
     importGlobal,

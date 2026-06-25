@@ -69,6 +69,7 @@ export interface DashboardTool {
   installReason?: string;
   importableCount?: number;
   assetCount: number;
+  compatibleAssetCount: number;
   nativeCount: number;
   degradedCount: number;
   skippedCount: number;
@@ -114,8 +115,10 @@ export interface SyncResult {
 type ActionState =
   | { status: "idle" }
   | { status: "running"; kind: ActionKind }
+  | { status: "running-tool-toggle"; target: Target; enable: boolean; scope: DashboardScopeFilter }
   | { status: "sync-done"; scope: DashboardScopeFilter; written: number; unchanged: number; errors: SyncResult["errors"] }
   | { status: "update-done"; updated: number; errors: string[] }
+  | { status: "tool-toggle-done"; target: Target; enable: boolean; updated: number; errors: string[] }
   | { status: "refresh-done" }
   | { status: "error"; kind: ActionKind; message: string };
 
@@ -125,6 +128,7 @@ export interface DashboardProps {
   onSync: (scope: DashboardScopeFilter) => Promise<SyncResult>;
   onRefresh: () => Promise<DashboardData>;
   onUpdate: () => Promise<{ updated: number; errors: string[] }>;
+  onToggleTool: (target: Target, enable: boolean, scope: DashboardScopeFilter) => Promise<{ updated: number; errors: string[] }>;
   onListImportAssets: (tool: ImportTool, global: boolean) => Promise<ImportCandidate[]>;
   onImport: (tool: ImportTool, ids: string[], global: boolean) => Promise<{ imported: number; errors: string[] }>;
   importGlobal: boolean;
@@ -238,6 +242,13 @@ function assetTargetSyncLabel(asset: DashboardAsset, target: Target, tools?: Das
   if (targetOutputs.some((output) => output.action === "update")) return { label: "outdated", color: "yellow" };
   if (targetOutputs.some((output) => output.action === "create")) return { label: "missing", color: "yellow" };
   return { label: "synced", color: "green" };
+}
+
+function toolEnableState(tool: DashboardTool): { label: "enabled" | "partial" | "disabled" | "unsupported"; color: string; nextEnable: boolean } {
+  if (tool.compatibleAssetCount === 0) return { label: "unsupported", color: "gray", nextEnable: true };
+  if (tool.assetCount === 0) return { label: "disabled", color: "gray", nextEnable: true };
+  if (tool.assetCount >= tool.compatibleAssetCount) return { label: "enabled", color: "green", nextEnable: false };
+  return { label: "partial", color: "yellow", nextEnable: true };
 }
 
 function formatCount(value: number, singular: string, plural = `${singular}s`): string {
@@ -365,6 +376,20 @@ function actionMessage(action: ActionState): DashboardActivity | null {
       message: action.updated === 0 ? "Lockfiles are already current." : `Updated ${formatCount(action.updated, "lockfile entry", "lockfile entries")}.`,
     };
   }
+  if (action.status === "tool-toggle-done") {
+    if (action.errors.length > 0) {
+      return {
+        level: "error",
+        message: `${action.enable ? "Enable" : "Disable"} ${TARGET_LABEL[action.target]} failed.`,
+        detail: action.errors[0],
+      };
+    }
+    return {
+      level: "success",
+      message: `${action.enable ? "Enabled" : "Disabled"} ${TARGET_LABEL[action.target]}.`,
+      detail: `${action.updated} asset${action.updated === 1 ? "" : "s"} updated.`,
+    };
+  }
   if (action.status === "refresh-done") {
     return { level: "success", message: "Dashboard refreshed from disk." };
   }
@@ -400,6 +425,7 @@ export function Dashboard({
   onSync,
   onRefresh,
   onUpdate,
+  onToggleTool,
   onListImportAssets,
   onImport,
   importGlobal,
@@ -424,7 +450,7 @@ export function Dashboard({
   const [importMode, setImportMode] = useState(false);
   const [action, setAction] = useState<ActionState>({ status: "idle" });
 
-  const isRunning = action.status === "running";
+  const isRunning = action.status === "running" || action.status === "running-tool-toggle";
   const compact = columns < 92;
   const verySmall = rows < 22 || columns < 72;
   const outputs = outputsForScope(liveData, scopeFilter);
@@ -668,6 +694,12 @@ export function Dashboard({
       setImportMode(true);
       return;
     }
+    if (input === "e" && screen === "tools" && selectedTool) {
+      const next = toolEnableState(selectedTool);
+      if (next.label === "unsupported") return;
+      setAction({ status: "running-tool-toggle", target: selectedTool.id, enable: next.nextEnable, scope: scopeFilter });
+      return;
+    }
     if (input === "p") {
       setActiveScreen("preview");
       return;
@@ -694,6 +726,20 @@ export function Dashboard({
   });
 
   useEffect(() => {
+    if (action.status === "running-tool-toggle") {
+      onToggleTool(action.target, action.enable, action.scope)
+        .then(async (result) => {
+          setAction({ status: "tool-toggle-done", target: action.target, enable: action.enable, updated: result.updated, errors: result.errors });
+          try {
+            setLiveData(await onRefresh());
+          } catch {
+            // Keep the toggle result visible even if refresh fails; explicit refresh can retry.
+          }
+        })
+        .catch((err: Error) => setAction({ status: "error", kind: "refresh", message: err.message }));
+      return;
+    }
+
     if (action.status !== "running") return;
     const { kind } = action;
 
@@ -755,18 +801,19 @@ export function Dashboard({
   const subtitle = `${currentScreen.label.toLowerCase()} · ${scopeFilter === "all" ? liveData.scope : scopeFilter}`;
   const pendingWrites = outputs.filter((output) => output.action !== "skip").length;
   const headerStatus = isRunning
-    ? `${action.kind} running`
+    ? action.status === "running" ? `${action.kind} running` : `${action.enable ? "enable" : "disable"} ${TARGET_LABEL[action.target]}`
     : compact
       ? pendingWrites > 0 ? `${pendingWrites} pending` : "synced"
       : suggestedAction(liveData, outputs).message;
   const keyHints = isRunning
-    ? [{ key: "...", label: `${action.kind} running` }]
+    ? [{ key: "...", label: action.status === "running" ? `${action.kind} running` : "tool toggle running" }]
     : compact
       ? [
           { key: "1-8", label: "nav" },
           { key: "j/k", label: "move" },
           { key: "/", label: "search" },
           { key: "i", label: "import" },
+          { key: "e", label: "toggle tool" },
           { key: "s", label: "sync" },
           { key: "?", label: "help" },
           { key: "q", label: "quit" },
@@ -778,6 +825,7 @@ export function Dashboard({
           { key: "/", label: "search" },
           { key: "i", label: "import" },
           { key: "p", label: "preview" },
+          { key: "e", label: "enable/disable tool" },
           { key: "s", label: "sync" },
           { key: "?", label: "help" },
           { key: "q", label: "quit" },
@@ -1195,6 +1243,7 @@ function ToolsScreen({ tools, selectedIndex, active, height, width }: { tools: D
       <Box flexDirection="column">
         <Box gap={1}>
           <Text dimColor>Install</Text>
+          <Text dimColor>Enabled</Text>
           <Text dimColor>Tool</Text>
           <Text dimColor>Assets</Text>
           <Text dimColor>Import</Text>
@@ -1210,15 +1259,17 @@ function ToolsScreen({ tools, selectedIndex, active, height, width }: { tools: D
               const selected = active && realIndex === selectedIndex;
               const color = tool.state === "configured" ? "green" : tool.state === "available" ? "yellow" : "gray";
               const installLabel = tool.state === "configured" ? "installed" : "missing";
+              const enabled = toolEnableState(tool);
               const detail = tool.installReason ?? tool.targetPath;
               return (
                 <Box key={tool.id} gap={1}>
                   <Text color={selected ? "magenta" : color}>{selected ? ">" : tool.state === "configured" ? "●" : "○"}</Text>
                   <Text color={color}>{installLabel.padEnd(9)}</Text>
+                  <Text color={enabled.color}>{enabled.label.padEnd(8)}</Text>
                   <Text color={selected ? "magenta" : undefined} bold={selected}>{truncate(tool.label, 18)}</Text>
                   <Text>{tool.assetCount}</Text>
                   <Text color={(tool.importableCount ?? 0) > 0 ? "green" : "gray"}>{tool.importableCount ?? 0}</Text>
-                  <Text dimColor>{compactPath(detail, Math.max(18, width - 54))}</Text>
+                  <Text dimColor>{compactPath(detail, Math.max(18, width - 64))}</Text>
                 </Box>
               );
             })}
@@ -1527,6 +1578,7 @@ function AssetDetails({ asset, tools, width }: { asset: DashboardAsset; tools: D
 function ToolDetails({ tool, width }: { tool: DashboardTool; width: number }) {
   const color = tool.state === "configured" ? "green" : tool.state === "available" ? "yellow" : "gray";
   const installed = tool.state === "configured";
+  const enabled = toolEnableState(tool);
   return (
     <Box flexDirection="column">
       <Text color="magenta" bold>{tool.label}</Text>
@@ -1534,6 +1586,11 @@ function ToolDetails({ tool, width }: { tool: DashboardTool; width: number }) {
       <Box marginTop={1} flexDirection="column">
         <Text bold>Detection</Text>
         <Text dimColor>{tool.installReason ? compactPath(tool.installReason, width - 4) : "No known command or config path found."}</Text>
+      </Box>
+      <Box marginTop={1} flexDirection="column">
+        <Text bold>Enabled in coactl</Text>
+        <Text color={enabled.color}>{enabled.label} · {tool.assetCount}/{tool.compatibleAssetCount} compatible assets target this tool</Text>
+        <Text dimColor>{enabled.label === "unsupported" ? "No current asset kind can emit to this target." : "Press e on the Tools page to enable or disable this tool for compatible local assets."}</Text>
       </Box>
       <Box marginTop={1} flexDirection="column">
         <Text bold>Target path</Text>

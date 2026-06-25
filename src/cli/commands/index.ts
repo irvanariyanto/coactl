@@ -13,6 +13,7 @@ import { explainAction } from "./explain.js";
 
 import { importAction } from "./import.js";
 import { enableCodexAction } from "./enable-codex.js";
+import { enableInstalledToolsAction } from "./enable-installed-tools.js";
 
 export interface CommandSpec {
   name: string;
@@ -29,6 +30,13 @@ function addManifestScopeOptions(cmd: Command, globalDescription: string): Comma
 }
 
 export const commandSpecs: CommandSpec[] = [
+  {
+    name: "enable-installed-tools",
+    description: "Add all detected installed tools to compatible local asset targets",
+    configure: (cmd) => {
+      addManifestScopeOptions(cmd, "use global manifest").action(enableInstalledToolsAction);
+    },
+  },
   {
     name: "enable-codex",
     description: "Add Codex to compatible local asset targets in the active manifest scope",
