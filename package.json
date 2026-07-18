@@ -1,41 +1,23 @@
 {
   "name": "coactl",
-  "version": "0.1.0",
-  "description": "CLI + registry for defining agent assets once and syncing them to multiple AI coding tools.",
+  "version": "0.2.1",
+  "private": true,
+  "description": "Local web app to manage native AI coding skills across tools, with a clear Global vs Project split.",
   "type": "module",
   "engines": {
     "node": ">=20"
   },
-  "bin": {
-    "coactl": "dist/cli/index.js"
-  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "build": "tsc",
-    "dev": "tsx src/cli/index.ts",
-    "test": "vitest run",
-    "lint": "tsc --noEmit",
-    "cli": "tsx src/cli/index.ts",
-    "dashboard": "tsx src/cli/index.ts dashboard"
-  },
-  "dependencies": {
-    "@clack/prompts": "^1.5.1",
-    "@inkjs/ui": "^2.0.0",
-    "chalk": "^5.4.1",
-    "cli-table3": "^0.6.5",
-    "commander": "^12.1.0",
-    "fullscreen-ink": "^0.1.0",
-    "ink": "^5.2.1",
-    "ora": "^9.4.0",
-    "react": "^18.3.1",
-    "yaml": "^2.5.1",
-    "zod": "^3.23.8"
-  },
-  "devDependencies": {
-    "@types/node": "^22.5.5",
-    "@types/react": "^18.3.12",
-    "ink-testing-library": "^4.0.0",
-    "typescript": "^5.6.2",
-    "tsx": "^4.19.1",
-    "vitest": "^2.1.1"
+    "dev": "node scripts/dev.mjs",
+    "dev:server": "npm run build -w @coactl/domain && npm run dev -w @coactl/server",
+    "dev:web": "npm run dev -w @coactl/web",
+    "build": "npm run build -w @coactl/domain && npm run build -w @coactl/server && npm run build -w @coactl/web",
+    "test": "npm run test -w @coactl/domain",
+    "lint": "npm run build -w @coactl/domain && npm run lint -w @coactl/server && npm run lint -w @coactl/web",
+    "start": "npm run start -w @coactl/server"
   }
 }
