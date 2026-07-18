@@ -395,6 +395,7 @@ export function App() {
 
         {view.screen === "skills" && workspace && (
           <SkillsListView
+            key={`${view.mode}:${view.tool}`}
             mode={view.mode}
             tool={view.tool}
             skills={skills}
