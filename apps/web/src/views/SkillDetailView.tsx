@@ -9,6 +9,7 @@ interface Props {
   workspace: Workspace;
   projectRootSet: boolean;
   busy: boolean;
+  dirty: boolean;
   onChangeContents: (contents: string) => void;
   onSave: () => Promise<void>;
   onDelete: () => Promise<void>;
@@ -31,6 +32,7 @@ export function SkillDetailView({
   workspace,
   projectRootSet,
   busy,
+  dirty,
   onChangeContents,
   onSave,
   onDelete,
@@ -41,6 +43,7 @@ export function SkillDetailView({
   const [overwrite, setOverwrite] = useState(false);
   const [plan, setPlan] = useState<ImportPlan["plan"] | null>(null);
   const [results, setResults] = useState<ImportResult["results"] | null>(null);
+  const [diffKey, setDiffKey] = useState<string | null>(null);
 
   const destinations = useMemo(
     () => buildDestinations(tool, mode, workspace, projectRootSet),
@@ -68,6 +71,7 @@ export function SkillDetailView({
     const targets = selectedTargets();
     if (!targets.length) return;
     setResults(null);
+    setDiffKey(null);
     const result = await onPreviewImport(targets, overwrite);
     setPlan(result.plan);
   }
@@ -77,6 +81,7 @@ export function SkillDetailView({
     if (!targets.length) return;
     const result = await onImport(targets, overwrite);
     setPlan(null);
+    setDiffKey(null);
     setResults(result.results);
   }
 
@@ -98,6 +103,7 @@ export function SkillDetailView({
               {toolLabel(tool)} / {skill.id}
               <span className={`badge scope-${mode}`}>{mode}</span>
               {skill.readOnly && <span className="badge warn">read-only</span>}
+              {dirty && <span className="badge warn">unsaved</span>}
             </h2>
             <code className="path-line" title={skill.filePath}>
               {skill.filePath}
@@ -143,6 +149,7 @@ export function SkillDetailView({
           <span>SKILL.md</span>
           <span>
             {lineCount} line{lineCount === 1 ? "" : "s"} · {skill.contents.length} chars
+            {dirty && " · unsaved changes"}
             {!skill.readOnly && " · ⌘S to save"}
           </span>
         </div>
@@ -218,30 +225,52 @@ export function SkillDetailView({
                 </tr>
               </thead>
               <tbody>
-                {plan.map((p) => (
-                  <tr key={`${p.tool}:${p.scope}`}>
-                    <td>
-                      {toolLabel(p.tool)}
-                      <span className={`badge scope-${p.scope}`} style={{ marginLeft: 6 }}>
-                        {p.scope}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`badge ${actionTone(p.action)}`}>{p.action}</span>
-                      {p.reason && (
-                        <span className="muted" style={{ display: "block", fontSize: "0.78rem" }}>
-                          {p.reason}
+                {plan.map((p) => {
+                  const key = `${p.tool}:${p.scope}`;
+                  const canDiff = p.action === "overwrite" && p.existingContents !== undefined;
+                  const diffOpen = diffKey === key;
+                  return [
+                    <tr key={key}>
+                      <td>
+                        {toolLabel(p.tool)}
+                        <span className={`badge scope-${p.scope}`} style={{ marginLeft: 6 }}>
+                          {p.scope}
                         </span>
-                      )}
-                    </td>
-                    <td>
-                      <code className="path-line" title={p.filePath}>
-                        {p.filePath}
-                        {p.exists ? " (exists)" : ""}
-                      </code>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td>
+                        <span className={`badge ${actionTone(p.action)}`}>{p.action}</span>
+                        {p.reason && (
+                          <span className="muted" style={{ display: "block", fontSize: "0.78rem" }}>
+                            {p.reason}
+                          </span>
+                        )}
+                        {canDiff && (
+                          <button
+                            type="button"
+                            className="ghost"
+                            style={{ marginLeft: 8, padding: "0.1rem 0.5rem", fontSize: "0.78rem" }}
+                            onClick={() => setDiffKey(diffOpen ? null : key)}
+                          >
+                            {diffOpen ? "Hide diff" : "View diff"}
+                          </button>
+                        )}
+                      </td>
+                      <td>
+                        <code className="path-line" title={p.filePath}>
+                          {p.filePath}
+                          {p.exists ? " (exists)" : ""}
+                        </code>
+                      </td>
+                    </tr>,
+                    canDiff && diffOpen && (
+                      <tr key={`${key}:diff`}>
+                        <td colSpan={3} style={{ padding: 0 }}>
+                          <ContentsDiff current={p.existingContents!} incoming={skill.contents} />
+                        </td>
+                      </tr>
+                    ),
+                  ];
+                })}
               </tbody>
             </table>
           </div>
@@ -290,6 +319,63 @@ export function SkillDetailView({
       </section>
     </div>
   );
+}
+
+/** Unified line diff: what would change at the target if the import overwrites it. */
+function ContentsDiff({ current, incoming }: { current: string; incoming: string }) {
+  const rows = useMemo(() => diffLines(current.split("\n"), incoming.split("\n")), [current, incoming]);
+  const changed = rows.some((r) => r.kind !== "ctx");
+  return (
+    <div className="diff-block">
+      <div className="diff-head">
+        <span className="badge danger">− current on disk</span>
+        <span className="badge clean">+ incoming (this skill)</span>
+        {!changed && <span className="muted">contents are identical</span>}
+      </div>
+      <pre className="diff-body">
+        {rows.map((r, i) => (
+          <span key={i} className={`diff-line ${r.kind}`}>
+            {r.kind === "del" ? "− " : r.kind === "add" ? "+ " : "  "}
+            {r.text}
+            {"\n"}
+          </span>
+        ))}
+      </pre>
+    </div>
+  );
+}
+
+type DiffRow = { kind: "ctx" | "del" | "add"; text: string };
+
+/** LCS-based line diff; SKILL.md files are small so O(n·m) is fine. */
+function diffLines(a: string[], b: string[]): DiffRow[] {
+  const n = a.length;
+  const m = b.length;
+  const lcs: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      lcs[i]![j] = a[i] === b[j] ? lcs[i + 1]![j + 1]! + 1 : Math.max(lcs[i + 1]![j]!, lcs[i]![j + 1]!);
+    }
+  }
+  const rows: DiffRow[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) {
+      rows.push({ kind: "ctx", text: a[i]! });
+      i++;
+      j++;
+    } else if (lcs[i + 1]![j]! >= lcs[i]![j + 1]!) {
+      rows.push({ kind: "del", text: a[i]! });
+      i++;
+    } else {
+      rows.push({ kind: "add", text: b[j]! });
+      j++;
+    }
+  }
+  while (i < n) rows.push({ kind: "del", text: a[i++]! });
+  while (j < m) rows.push({ kind: "add", text: b[j++]! });
+  return rows;
 }
 
 function actionTone(action: "write" | "overwrite" | "skip" | "error"): string {

@@ -828,6 +828,50 @@ tbody tr.row-link:hover {
   border-top: 1px solid var(--border);
 }
 
+/* Overwrite diff (import preview) */
+.diff-block {
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.diff-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.diff-body {
+  margin: 0;
+  padding: 0.6rem 0.9rem;
+  max-height: 320px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.diff-line {
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.diff-line.del {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+.diff-line.add {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent-strong);
+}
+
+.diff-line.ctx {
+  color: var(--text-muted);
+}
+
 .dest-row {
   display: flex;
   align-items: center;

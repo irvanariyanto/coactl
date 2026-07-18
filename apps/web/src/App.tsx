@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Skill, type Workspace } from "./api";
-import { modeToScope, toolLabel, type Mode, type View } from "./nav";
+import { modeToScope, parseHash, toolLabel, viewToHash, type Mode, type View } from "./nav";
 import { ModeHomeView } from "./views/ModeHomeView";
 import { ProjectGateView } from "./views/ProjectGateView";
 import { ResourcesView } from "./views/ResourcesView";
@@ -14,12 +14,23 @@ interface Toast {
   text: string;
 }
 
+const UNSAVED_PROMPT = "You have unsaved changes to this skill. Discard them?";
+
 export function App() {
-  const [view, setView] = useState<View>({ screen: "mode" });
   const [root, setRoot] = useState(() => localStorage.getItem("coactl.root") || "");
+  const [view, setView] = useState<View>(() => {
+    const fromHash = parseHash(window.location.hash);
+    if (!fromHash) return { screen: "mode" };
+    // Deep links into Project mode need a root; fall back to the gate.
+    if ("mode" in fromHash && fromHash.mode === "project" && !localStorage.getItem("coactl.root")) {
+      return { screen: "project-gate" };
+    }
+    return fromHash;
+  });
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [draft, setDraft] = useState<Skill | null>(null);
+  const [savedContents, setSavedContents] = useState<string | null>(null);
   const [showAllInstalled, setShowAllInstalled] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [busy, setBusy] = useState(false);
@@ -27,6 +38,56 @@ export function App() {
 
   const effectiveRoot = root.trim() || ".";
   const projectRootSet = Boolean(root.trim());
+
+  const dirty =
+    view.screen === "skill" &&
+    draft !== null &&
+    savedContents !== null &&
+    draft.contents !== savedContents;
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  const viewRef = useRef(view);
+  viewRef.current = view;
+
+  /** All in-app navigation goes through here so unsaved edits can veto it. */
+  const navigate = useCallback((next: View) => {
+    if (dirtyRef.current && !window.confirm(UNSAVED_PROMPT)) return;
+    setView(next);
+  }, []);
+
+  // Keep the URL hash in sync with the current view (deep links, refresh).
+  useEffect(() => {
+    const hash = viewToHash(view);
+    if (window.location.hash !== hash) {
+      history.replaceState(null, "", hash);
+    }
+  }, [view]);
+
+  // Back/forward buttons and hand-edited hashes.
+  useEffect(() => {
+    function onHashChange() {
+      const current = viewRef.current;
+      const parsed = parseHash(window.location.hash);
+      if (!parsed || (dirtyRef.current && !window.confirm(UNSAVED_PROMPT))) {
+        history.replaceState(null, "", viewToHash(current));
+        return;
+      }
+      setView(parsed);
+    }
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  // Warn before closing/reloading the tab with unsaved edits.
+  useEffect(() => {
+    if (!dirty) return;
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty]);
 
   const currentMode: Mode | null =
     view.screen === "mode" || view.screen === "project-gate" ? null : view.mode;
@@ -88,6 +149,7 @@ export function App() {
   useEffect(() => {
     if (view.screen !== "skill") {
       setDraft(null);
+      setSavedContents(null);
       return;
     }
     const scope = modeToScope(view.mode);
@@ -96,7 +158,10 @@ export function App() {
     void api
       .getSkill(effectiveRoot, view.tool, view.id, scope, view.path)
       .then((res) => {
-        if (!cancelled) setDraft(res.skill);
+        if (!cancelled) {
+          setDraft(res.skill);
+          setSavedContents(res.skill.contents);
+        }
       })
       .catch((err) => {
         if (!cancelled) pushToast("error", (err as Error).message);
@@ -111,10 +176,10 @@ export function App() {
 
   function goMode(mode: Mode) {
     if (mode === "project" && !root.trim()) {
-      setView({ screen: "project-gate" });
+      navigate({ screen: "project-gate" });
       return;
     }
-    setView({ screen: "tools", mode });
+    navigate({ screen: "tools", mode });
   }
 
   async function handlePickFolder() {
@@ -167,6 +232,7 @@ export function App() {
         false,
       );
       setDraft(skill);
+      setSavedContents(skill.contents);
       pushToast("success", "Saved");
     } catch (err) {
       pushToast("error", (err as Error).message);
@@ -192,7 +258,7 @@ export function App() {
 
   const crumbs: Array<{ label: string; onClick?: () => void }> = [];
   if (view.screen !== "mode") {
-    crumbs.push({ label: "Home", onClick: () => setView({ screen: "mode" }) });
+    crumbs.push({ label: "Home", onClick: () => navigate({ screen: "mode" }) });
   }
   if (view.screen === "project-gate") {
     crumbs.push({ label: "Project" });
@@ -206,19 +272,19 @@ export function App() {
           : "Global";
     crumbs.push({
       label: modeLabel,
-      onClick: () => setView({ screen: "tools", mode: view.mode }),
+      onClick: () => navigate({ screen: "tools", mode: view.mode }),
     });
   }
   if (view.screen === "resources" || view.screen === "skills" || view.screen === "skill") {
     crumbs.push({
       label: toolLabel(view.tool),
-      onClick: () => setView({ screen: "resources", mode: view.mode, tool: view.tool }),
+      onClick: () => navigate({ screen: "resources", mode: view.mode, tool: view.tool }),
     });
   }
   if (view.screen === "skills" || view.screen === "skill") {
     crumbs.push({
       label: "Skills",
-      onClick: () => setView({ screen: "skills", mode: view.mode, tool: view.tool }),
+      onClick: () => navigate({ screen: "skills", mode: view.mode, tool: view.tool }),
     });
   }
   if (view.screen === "skill") {
@@ -231,7 +297,7 @@ export function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <button type="button" className="brand" onClick={() => setView({ screen: "mode" })}>
+        <button type="button" className="brand" onClick={() => navigate({ screen: "mode" })}>
           <span className="logo">c</span>
           <span>
             coa<em>ctl</em>
@@ -303,7 +369,7 @@ export function App() {
             onPickFolder={() => void handlePickFolder()}
             onContinue={() => {
               if (!root.trim()) return;
-              setView({ screen: "tools", mode: "project" });
+              navigate({ screen: "tools", mode: "project" });
             }}
           />
         )}
@@ -314,7 +380,7 @@ export function App() {
             workspace={workspace}
             showAllInstalled={showAllInstalled}
             onShowAllInstalled={setShowAllInstalled}
-            onSelectTool={(tool) => setView({ screen: "resources", mode: view.mode, tool })}
+            onSelectTool={(tool) => navigate({ screen: "resources", mode: view.mode, tool })}
           />
         )}
 
@@ -323,7 +389,7 @@ export function App() {
             mode={view.mode}
             tool={view.tool}
             workspace={workspace}
-            onSelectSkills={() => setView({ screen: "skills", mode: view.mode, tool: view.tool })}
+            onSelectSkills={() => navigate({ screen: "skills", mode: view.mode, tool: view.tool })}
           />
         )}
 
@@ -335,7 +401,7 @@ export function App() {
             workspace={workspace}
             busy={busy}
             onOpen={(skill) =>
-              setView({
+              navigate({
                 screen: "skill",
                 mode: view.mode,
                 tool: view.tool,
@@ -355,6 +421,7 @@ export function App() {
             workspace={workspace}
             projectRootSet={projectRootSet}
             busy={busy}
+            dirty={dirty}
             onChangeContents={(contents) => setDraft({ ...draft, contents })}
             onSave={handleSave}
             onDelete={handleDelete}
