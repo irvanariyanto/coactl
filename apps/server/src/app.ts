@@ -1,4 +1,3 @@
-import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { execFile } from "node:child_process";
@@ -20,14 +19,11 @@ import {
 } from "@coactl/domain";
 import { z } from "zod";
 
-const HOST = "127.0.0.1";
-const PORT = Number(process.env.COACTL_PORT ?? 8787);
-
 type Variables = {
   projectRoot: string;
 };
 
-const app = new Hono<{ Variables: Variables }>();
+export const app = new Hono<{ Variables: Variables }>();
 
 app.use(
   "*",
@@ -325,6 +321,3 @@ app.post("/api/pick-folder", async (c) => {
     return c.json({ error: (err as Error).message }, 400);
   }
 });
-
-console.log(`coactl server listening on http://${HOST}:${PORT}`);
-serve({ fetch: app.fetch, hostname: HOST, port: PORT });

@@ -16,7 +16,7 @@
     "dev:server": "npm run build -w @coactl/domain && npm run dev -w @coactl/server",
     "dev:web": "npm run dev -w @coactl/web",
     "build": "npm run build -w @coactl/domain && npm run build -w @coactl/server && npm run build -w @coactl/web",
-    "test": "npm run test -w @coactl/domain",
+    "test": "npm run test -w @coactl/domain && npm run build -w @coactl/domain && npm run test -w @coactl/server",
     "lint": "npm run build -w @coactl/domain && npm run lint -w @coactl/server && npm run lint -w @coactl/web",
     "start": "npm run start -w @coactl/server"
   }

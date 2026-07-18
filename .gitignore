@@ -28,3 +28,4 @@ npm-debug.log*
 /.claude/
 /.cursor/
 packages/domain/.test-tmp/
+apps/server/.test-tmp/
