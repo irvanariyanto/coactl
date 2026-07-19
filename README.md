@@ -78,7 +78,7 @@ Or run the pieces separately: `npm run dev:server` (API on `http://127.0.0.1:878
 Login is **off** by default. On the home screen, enable it and set a password — coactl writes a
 one-way **scrypt hash** to `~/.coactl/auth.json` (mode `600`). No `.env` password.
 
-When enabled, the UI shows an Unlock screen and all `/api/*` routes (except health / auth) require
+When enabled, the UI shows a Login screen and all `/api/*` routes (except health / auth) require
 a session cookie.
 
 ## Production API and UI
@@ -176,9 +176,9 @@ OS user.
 | POST | `/api/workflows/scaffold` | Scaffold (+ save) |
 | POST | `/api/workflows/import` | Copy across scopes (`dryRun` previews) |
 | POST | `/api/pick-folder` | Native OS folder picker for project root |
-| GET | `/api/auth/status` | Whether login is enabled / session unlocked |
+| GET | `/api/auth/status` | Whether login is enabled and the session is authenticated |
 | POST | `/api/auth/enable` | Enable login + store password hash |
-| POST | `/api/auth/login` | Unlock (sets httpOnly session cookie) |
+| POST | `/api/auth/login` | Log in (sets httpOnly session cookie) |
 | POST | `/api/auth/logout` | Clear session |
 | POST | `/api/auth/disable` | Disable login (password required) |
 | POST | `/api/auth/password` | Change password |

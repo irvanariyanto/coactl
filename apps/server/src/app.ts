@@ -109,7 +109,7 @@ app.use("/api/*", async (c, next) => {
   const file = loadAuthFile();
   const enabled = Boolean(file?.enabled && file.hash && file.salt && file.sessionSecret);
   if (enabled && !isPublicAuthPath(pathname, c.req.method) && !readSession(c, file)) {
-    return c.json({ error: "Unlock required", code: "AUTH_REQUIRED" }, 401);
+    return c.json({ error: "Login required", code: "AUTH_REQUIRED" }, 401);
   }
 
   const rootParam = c.req.query("root") ?? process.env.COACTL_ROOT;

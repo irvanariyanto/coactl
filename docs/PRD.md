@@ -37,7 +37,7 @@ Developers use multiple AI coding assistants (Claude Code, Cursor, Codex, Gemini
 3. **Show resolved filesystem paths** so users always know where resources live.
 4. Support **CRUD** for skills in each tool’s native folder (`…/skills/<id>/SKILL.md`).
 5. Support **import/copy** across tools and across scopes without reformatting file contents.
-6. Stay **local and private** by default (localhost bind; no cloud account). Optional single-password unlock for VPS deploy — hash stored in `~/.coactl/auth.json`, not `.env`.
+6. Stay **local and private** by default (localhost bind; no cloud account). Optional single-password login for VPS deploy — hash stored in `~/.coactl/auth.json`, not `.env`.
 7. Make import **trustworthy** (preview before overwrite; clear duplicate handling).
 
 ### Non-goals (current release / near-term)

@@ -2,10 +2,10 @@ import { useState, type FormEvent } from "react";
 import { api, type AuthStatus } from "../api";
 
 interface Props {
-  onUnlocked: (status: AuthStatus) => void;
+  onLoggedIn: (status: AuthStatus) => void;
 }
 
-export function UnlockView({ onUnlocked }: Props) {
+export function UnlockView({ onLoggedIn }: Props) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -16,7 +16,7 @@ export function UnlockView({ onUnlocked }: Props) {
     setError(null);
     try {
       const status = await api.login(password);
-      onUnlocked(status);
+      onLoggedIn(status);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -36,7 +36,7 @@ export function UnlockView({ onUnlocked }: Props) {
       </header>
       <main className="content unlock-content">
         <form className="unlock-card" onSubmit={(e) => void submit(e)}>
-          <h1>Unlock coactl</h1>
+          <h1>Log in to coactl</h1>
           <p className="panel-sub">
             Login is enabled on this instance. Enter the password to manage skills and rules.
           </p>
@@ -53,7 +53,7 @@ export function UnlockView({ onUnlocked }: Props) {
           </label>
           {error && <p className="form-error">{error}</p>}
           <button className="primary" type="submit" disabled={busy || !password}>
-            Unlock
+            Log in
           </button>
         </form>
       </main>

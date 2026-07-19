@@ -1453,14 +1453,8 @@ export function App() {
     crumbs.push({ label: view.id });
   }
 
-  const showRootControl =
-    view.screen === "project-gate" ||
-    currentMode === "project" ||
-    view.screen === "skill" ||
-    view.screen === "rule" ||
-    view.screen === "command" ||
-    view.screen === "workflow";
-  const rootControlForImportOnly =
+  const needsProjectRoot =
+    !root.trim() &&
     currentMode === "global" &&
     (view.screen === "skill" ||
       view.screen === "rule" ||
@@ -1507,7 +1501,7 @@ export function App() {
   }
 
   if (auth.enabled && !auth.unlocked) {
-    return <UnlockView onUnlocked={setAuth} />;
+    return <UnlockView onLoggedIn={setAuth} />;
   }
 
   return (
@@ -1544,49 +1538,16 @@ export function App() {
 
         {busy && <span className="busy-dot" aria-label="Working" />}
 
-        {showRootControl && (
-          <div className="root-control">
-            {rootControlForImportOnly && (
-              <span className="root-control-label" title="Needed for project import destinations">
-                Project root
-              </span>
-            )}
-            {(recent.length > 0 || root.trim()) && (
-              <select
-                className="recent-select"
-                aria-label="Switch project"
-                value={root.trim()}
-                title={root.trim() || undefined}
-                onChange={(e) => {
-                  if (!e.target.value) return;
-                  selectProject(e.target.value);
-                }}
-              >
-                {!root.trim() && <option value="">Select…</option>}
-                {!recent.includes(root.trim()) && root.trim() && (
-                  <option value={root.trim()}>{projectBasename(root.trim())}</option>
-                )}
-                {recent.map((path) => (
-                  <option key={path} value={path}>
-                    {projectBasename(path)}
-                  </option>
-                ))}
-              </select>
-            )}
-            <button type="button" onClick={() => void handlePickFolder()}>
-              Browse…
-            </button>
-            {(currentMode === "project" || view.screen === "project-gate") && (
-              <button
-                type="button"
-                className="ghost"
-                title="Open project picker"
-                onClick={() => navigate({ screen: "project-gate" })}
-              >
-                Projects
-              </button>
-            )}
-          </div>
+        {needsProjectRoot && (
+          <button
+            type="button"
+            className="topbar-context-action"
+            title="Set a project root to enable project import destinations"
+            onClick={() => void handlePickFolder()}
+          >
+            <span aria-hidden="true" />
+            Set project root…
+          </button>
         )}
 
         {currentMode && (
@@ -1614,7 +1575,7 @@ export function App() {
                 .catch((err) => pushToast("error", (err as Error).message));
             }}
           >
-            Lock
+            Log out
           </button>
         )}
       </header>

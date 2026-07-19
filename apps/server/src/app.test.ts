@@ -663,7 +663,7 @@ describe("optional login", () => {
     process.env.COACTL_AUTH_FILE = join(dir, "auth.json");
   });
 
-  it("gates api until unlocked and stores a scrypt hash on disk", async () => {
+  it("gates api until logged in and stores a scrypt hash on disk", async () => {
     const root = tempRoot();
     const enable = await app.request("/api/auth/enable", {
       method: "POST",
