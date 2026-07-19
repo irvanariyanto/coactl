@@ -2,7 +2,7 @@
   <img src="docs/assets/readme-hero.svg" width="100%" alt="coactl - your AI toolkit, in order">
   <br><br>
   <p>
-    <img src="https://img.shields.io/badge/version-0.4.1-bb8a45" alt="Version 0.4.1">
+    <img src="https://img.shields.io/badge/version-0.4.2-bb8a45" alt="Version 0.4.2">
     <img src="https://img.shields.io/badge/Node.js-%E2%89%A520-3c7a57" alt="Node.js 20 or newer">
     <img src="https://img.shields.io/badge/runs-local-4d7564" alt="Runs locally">
     <img src="https://img.shields.io/badge/license-MIT-31343a" alt="MIT license">
@@ -205,6 +205,12 @@ for the as-built product requirements and current priorities.
 The legacy CLI is preserved at tag `cli-v0.1.0` and branch `archive/cli-v0.1`.
 
 ## Releases
+
+### 0.4.2
+
+Added a polished one-line installer with foreground and background lifecycle controls, automatic
+updates for background installations, and an elegant user-focused README. coactl now displays its
+current version and quietly announces newer GitHub releases with a copyable update command.
 
 ### 0.4.1
 

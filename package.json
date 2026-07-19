@@ -1,6 +1,6 @@
 {
   "name": "coactl",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "private": true,
   "description": "Local web app to manage native AI coding skills across tools, with a clear Global vs Project split.",
   "type": "module",

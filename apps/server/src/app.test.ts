@@ -60,7 +60,7 @@ describe("api basics", () => {
     expect(res.status).toBe(200);
     const body = await json(res);
     expect(body.ok).toBe(true);
-    expect(body.version).toBe("0.4.1");
+    expect(body.version).toBe("0.4.2");
     expect(body.focus).toBe("skills+rules+commands+workflows");
   });
 

@@ -94,6 +94,10 @@ if (( NODE_MAJOR < 20 )); then
   fail "Node.js 20 or newer is required; found $(node --version)."
 fi
 
+if [[ "$ACTION" == "--background" ]] && running_pid >/dev/null; then
+  stop_background
+fi
+
 if [[ -d "$INSTALL_DIR/.git" ]]; then
   EXISTING_REMOTE="$(git -C "$INSTALL_DIR" remote get-url origin 2>/dev/null || true)"
   case "$EXISTING_REMOTE" in

@@ -9,6 +9,7 @@ import {
 } from "../nav";
 import { projectBasename } from "../recent-projects";
 import { toolLabel } from "../nav";
+import { findAvailableUpdate, UPDATE_COMMAND } from "../update-check";
 
 interface Props {
   open: boolean;
@@ -39,6 +40,19 @@ export function AppSidebar({
 }: Props) {
   const sidebarRef = useRef<HTMLElement>(null);
   const [mobile, setMobile] = useState(() => window.matchMedia("(max-width: 900px)").matches);
+  const [availableVersion, setAvailableVersion] = useState<string | null>(null);
+  const [updateOpen, setUpdateOpen] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+
+  useEffect(() => {
+    let cancelled = false;
+    void findAvailableUpdate(__APP_VERSION__).then((version) => {
+      if (!cancelled) setAvailableVersion(version);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const query = window.matchMedia("(max-width: 900px)");
@@ -223,11 +237,54 @@ export function AppSidebar({
           </SidebarSection>
         </nav>
 
+        {availableVersion && updateOpen && (
+          <section className="sidebar-update" aria-label={`coactl ${availableVersion} is available`}>
+            <div className="sidebar-update-heading">
+              <span>
+                <small>Update available</small>
+                <strong>v{availableVersion}</strong>
+              </span>
+              <button type="button" aria-label="Close update details" onClick={() => setUpdateOpen(false)}>×</button>
+            </div>
+            <code>{UPDATE_COMMAND}</code>
+            <button
+              type="button"
+              className="sidebar-update-copy"
+              onClick={() => {
+                if (!navigator.clipboard?.writeText) {
+                  setCopyState("failed");
+                  return;
+                }
+                void navigator.clipboard.writeText(UPDATE_COMMAND).then(
+                  () => setCopyState("copied"),
+                  () => setCopyState("failed"),
+                );
+              }}
+            >
+              {copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy update command"}
+            </button>
+          </section>
+        )}
+
         <footer className="sidebar-footer" aria-label={`coactl version ${__APP_VERSION__}`}>
           <span className="sidebar-footer-mark" aria-hidden="true">c</span>
           <span className="sidebar-footer-product">coactl</span>
           <span className="sidebar-footer-line" aria-hidden="true" />
-          <span className="sidebar-footer-version">v{__APP_VERSION__}</span>
+          {availableVersion ? (
+            <button
+              type="button"
+              className="sidebar-version-update"
+              aria-expanded={updateOpen}
+              onClick={() => {
+                setUpdateOpen((current) => !current);
+                setCopyState("idle");
+              }}
+            >
+              v{availableVersion} available
+            </button>
+          ) : (
+            <span className="sidebar-footer-version">v{__APP_VERSION__}</span>
+          )}
         </footer>
       </aside>
     </>
