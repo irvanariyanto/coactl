@@ -1,4 +1,4 @@
-import type { RuleTool, ScopeMode, SkillTool, Workspace } from "./api";
+import type { CommandTool, RuleTool, ScopeMode, SkillTool, Workspace } from "./api";
 import type { Mode } from "./nav";
 
 export interface ImportDestination {
@@ -58,6 +58,35 @@ export function buildRuleDestinations(
         scope === "project"
           ? workspace.rulePathsByTool[tool]?.project
           : workspace.rulePathsByTool[tool]?.global;
+      const skillInfo = workspace.skillTools.find((t) => t.target === tool);
+      out.push({
+        key: `${tool}:${scope}`,
+        tool,
+        scope,
+        installed: skillInfo?.installed ?? false,
+        path: info?.preferred ?? "",
+      });
+    }
+  }
+  return out;
+}
+
+/** Command import targets are limited to tools with native command dirs. */
+export function buildCommandDestinations(
+  sourceTool: CommandTool,
+  sourceMode: Mode,
+  workspace: Workspace,
+  projectRootSet: boolean,
+): ImportDestination[] {
+  const scopes: ScopeMode[] = projectRootSet ? ["global", "project"] : ["global"];
+  const out: ImportDestination[] = [];
+  for (const tool of workspace.commandToolsAvailable) {
+    for (const scope of scopes) {
+      if (tool === sourceTool && scope === sourceMode) continue;
+      const info =
+        scope === "project"
+          ? workspace.commandPathsByTool[tool]?.project
+          : workspace.commandPathsByTool[tool]?.global;
       const skillInfo = workspace.skillTools.find((t) => t.target === tool);
       out.push({
         key: `${tool}:${scope}`,

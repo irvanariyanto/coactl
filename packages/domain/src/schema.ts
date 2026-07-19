@@ -71,3 +71,26 @@ export interface RuleRecord {
   shape: RuleShape;
   readOnly: boolean;
 }
+
+/**
+ * Tools with native slash-command (or workflow-as-command) markdown files.
+ * Codex / Gemini / Zed have no first-class commands dir in our matrix.
+ */
+export const COMMAND_TOOLS = ["claude-code", "cursor", "opencode", "antigravity"] as const;
+export type CommandTool = (typeof COMMAND_TOOLS)[number];
+
+export interface CommandRecord {
+  id: string;
+  tool: CommandTool;
+  scope: ScopeMode;
+  name: string;
+  description: string;
+  filePath: string;
+  contents: string;
+  body: string;
+  /** Always md for slash commands / workflows. */
+  extension: "md";
+  /** Antigravity stores these under workflows/; others under commands/. */
+  kind: "command" | "workflow";
+  readOnly: boolean;
+}

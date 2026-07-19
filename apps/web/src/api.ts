@@ -12,6 +12,8 @@ export type SkillTool =
 
 export type RuleTool = SkillTool;
 
+export type CommandTool = "claude-code" | "cursor" | "opencode" | "antigravity";
+
 export type RuleShape = "multi" | "singleton";
 
 export interface RuleLayoutInfo {
@@ -71,6 +73,24 @@ export interface SkillPathInfo {
 
 export type RulePathInfo = SkillPathInfo;
 
+export interface CommandPathInfo extends SkillPathInfo {
+  kind: "command" | "workflow";
+}
+
+export interface Command {
+  id: string;
+  tool: CommandTool;
+  scope: ScopeMode;
+  name: string;
+  description: string;
+  filePath: string;
+  body: string;
+  contents: string;
+  extension: "md";
+  kind: "command" | "workflow";
+  readOnly: boolean;
+}
+
 export interface Workspace {
   projectRoot: string;
   mode: Mode;
@@ -78,10 +98,16 @@ export interface Workspace {
   toolsForMode: SkillToolInfo[];
   toolSkillCounts: Record<SkillTool, { project: number; global: number }>;
   toolRuleCounts: Record<RuleTool, { project: number; global: number }>;
+  toolCommandCounts: Record<CommandTool, { project: number; global: number }>;
   skillPathsByTool: Record<SkillTool, { project: SkillPathInfo; global: SkillPathInfo }>;
   rulePathsByTool: Record<RuleTool, { project: RulePathInfo; global: RulePathInfo }>;
+  commandPathsByTool: Record<
+    CommandTool,
+    { project: CommandPathInfo; global: CommandPathInfo }
+  >;
   skillToolsAvailable: SkillTool[];
   ruleToolsAvailable: RuleTool[];
+  commandToolsAvailable: CommandTool[];
   ruleLayoutsByTool: Record<RuleTool, RuleLayoutInfo>;
 }
 
@@ -123,6 +149,30 @@ export interface RuleImportResult {
 export interface RuleImportPlan {
   plan: Array<{
     tool: RuleTool;
+    scope: ScopeMode;
+    id: string;
+    filePath: string;
+    exists: boolean;
+    action: "write" | "overwrite" | "skip" | "error";
+    reason?: string;
+    existingContents?: string;
+  }>;
+}
+
+export interface CommandImportResult {
+  results: Array<{
+    tool: CommandTool;
+    scope: ScopeMode;
+    id: string;
+    status: "written" | "skipped" | "error";
+    error?: string;
+    filePath?: string;
+  }>;
+}
+
+export interface CommandImportPlan {
+  plan: Array<{
+    tool: CommandTool;
     scope: ScopeMode;
     id: string;
     filePath: string;
@@ -293,6 +343,88 @@ export const api = {
     },
   ) {
     return request<RuleImportPlan>(`/api/rules/import${qs(root)}`, {
+      method: "POST",
+      body: JSON.stringify({ ...body, dryRun: true }),
+    });
+  },
+  listCommands(root: string, tool: CommandTool, scope: ScopeMode) {
+    return request<{ commands: Command[] }>(`/api/commands${qs(root, { tool, scope })}`);
+  },
+  getCommand(root: string, tool: CommandTool, id: string, scope: ScopeMode, path?: string) {
+    return request<{ command: Command }>(
+      `/api/commands/${tool}/${id}${qs(root, { scope, ...(path ? { path } : {}) })}`,
+    );
+  },
+  saveCommand(
+    root: string,
+    command: {
+      tool: CommandTool;
+      scope: ScopeMode;
+      id: string;
+      contents?: string;
+      filePath?: string;
+    },
+    create: boolean,
+  ) {
+    if (create) {
+      return request<{ command: Command }>(`/api/commands${qs(root)}`, {
+        method: "POST",
+        body: JSON.stringify(command),
+      });
+    }
+    return request<{ command: Command }>(
+      `/api/commands/${command.tool}/${command.id}${qs(root)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(command),
+      },
+    );
+  },
+  deleteCommand(
+    root: string,
+    tool: CommandTool,
+    id: string,
+    scope: ScopeMode,
+    path?: string,
+  ) {
+    return request(
+      `/api/commands/${tool}/${id}${qs(root, { scope, ...(path ? { path } : {}) })}`,
+      {
+        method: "DELETE",
+      },
+    );
+  },
+  scaffoldCommand(
+    root: string,
+    body: { id: string; tool: CommandTool; scope: ScopeMode; description?: string; save?: boolean },
+  ) {
+    return request<{ command: Command }>(`/api/commands/scaffold${qs(root)}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+  importCommand(
+    root: string,
+    body: {
+      source: { tool: CommandTool; scope: ScopeMode; id: string };
+      targets: Array<{ tool: CommandTool; scope: ScopeMode }>;
+      overwrite?: boolean;
+    },
+  ) {
+    return request<CommandImportResult>(`/api/commands/import${qs(root)}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+  previewCommandImport(
+    root: string,
+    body: {
+      source: { tool: CommandTool; scope: ScopeMode; id: string };
+      targets: Array<{ tool: CommandTool; scope: ScopeMode }>;
+      overwrite?: boolean;
+    },
+  ) {
+    return request<CommandImportPlan>(`/api/commands/import${qs(root)}`, {
       method: "POST",
       body: JSON.stringify({ ...body, dryRun: true }),
     });

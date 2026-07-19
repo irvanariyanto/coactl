@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   api,
+  type Command,
+  type CommandImportPlan,
+  type CommandImportResult,
+  type CommandTool,
   type ImportPlan,
   type ImportResult,
   type Rule,
@@ -12,13 +16,15 @@ import {
   type SkillTool,
   type Workspace,
 } from "./api";
-import { modeToScope, parseHash, toolLabel, viewToHash, type Mode, type View } from "./nav";
+import { modeToScope, parseHash, supportsCommands, toolLabel, viewToHash, type Mode, type View } from "./nav";
 import {
   forgetProject,
   loadRecentProjects,
   projectBasename,
   rememberProject,
 } from "./recent-projects";
+import { CommandDetailView } from "./views/CommandDetailView";
+import { CommandsListView } from "./views/CommandsListView";
 import { ModeHomeView } from "./views/ModeHomeView";
 import { ProjectGateView } from "./views/ProjectGateView";
 import { ResourcesView } from "./views/ResourcesView";
@@ -56,8 +62,11 @@ export function App() {
   const [skillsVersion, setSkillsVersion] = useState(0);
   const [rules, setRules] = useState<Rule[]>([]);
   const [rulesVersion, setRulesVersion] = useState(0);
+  const [commands, setCommands] = useState<Command[]>([]);
+  const [commandsVersion, setCommandsVersion] = useState(0);
   const [draft, setDraft] = useState<Skill | null>(null);
   const [ruleDraft, setRuleDraft] = useState<Rule | null>(null);
+  const [commandDraft, setCommandDraft] = useState<Command | null>(null);
   const [savedContents, setSavedContents] = useState<string | null>(null);
   const [showAllInstalled, setShowAllInstalled] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -75,7 +84,11 @@ export function App() {
     (view.screen === "rule" &&
       ruleDraft !== null &&
       savedContents !== null &&
-      ruleDraft.contents !== savedContents);
+      ruleDraft.contents !== savedContents) ||
+    (view.screen === "command" &&
+      commandDraft !== null &&
+      savedContents !== null &&
+      commandDraft.contents !== savedContents);
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
   const viewRef = useRef(view);
@@ -196,9 +209,30 @@ export function App() {
   }, [view, effectiveRoot, pushToast, rulesVersion]);
 
   useEffect(() => {
+    if (view.screen !== "commands" && view.screen !== "command") return;
+    const scope = modeToScope(view.mode);
+    let cancelled = false;
+    setBusy(true);
+    void api
+      .listCommands(effectiveRoot, view.tool, scope)
+      .then((res) => {
+        if (!cancelled) setCommands(res.commands);
+      })
+      .catch((err) => {
+        if (!cancelled) pushToast("error", (err as Error).message);
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, effectiveRoot, pushToast, commandsVersion]);
+
+  useEffect(() => {
     if (view.screen !== "skill") {
       setDraft(null);
-      if (view.screen !== "rule") setSavedContents(null);
+      if (view.screen !== "rule" && view.screen !== "command") setSavedContents(null);
       return;
     }
     const scope = modeToScope(view.mode);
@@ -237,6 +271,33 @@ export function App() {
         if (!cancelled) {
           setRuleDraft(res.rule);
           setSavedContents(res.rule.contents);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) pushToast("error", (err as Error).message);
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, effectiveRoot, pushToast]);
+
+  useEffect(() => {
+    if (view.screen !== "command") {
+      setCommandDraft(null);
+      return;
+    }
+    const scope = modeToScope(view.mode);
+    let cancelled = false;
+    setBusy(true);
+    void api
+      .getCommand(effectiveRoot, view.tool, view.id, scope, view.path)
+      .then((res) => {
+        if (!cancelled) {
+          setCommandDraft(res.command);
+          setSavedContents(res.command.contents);
         }
       })
       .catch((err) => {
@@ -343,6 +404,31 @@ export function App() {
     }
   }
 
+  async function handleCreateCommand(id: string) {
+    if (view.screen !== "commands") return;
+    setBusy(true);
+    try {
+      const { command } = await api.scaffoldCommand(effectiveRoot, {
+        id,
+        tool: view.tool,
+        scope: modeToScope(view.mode),
+        save: true,
+      });
+      pushToast("success", `Created ${command.id}`);
+      navigate({
+        screen: "command",
+        mode: view.mode,
+        tool: view.tool,
+        id: command.id,
+        path: command.filePath,
+      });
+    } catch (err) {
+      pushToast("error", (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleSave() {
     if (!draft || view.screen !== "skill") return;
     setBusy(true);
@@ -393,6 +479,31 @@ export function App() {
     }
   }
 
+  async function handleSaveCommand() {
+    if (!commandDraft || view.screen !== "command") return;
+    setBusy(true);
+    try {
+      const { command } = await api.saveCommand(
+        effectiveRoot,
+        {
+          tool: commandDraft.tool,
+          scope: commandDraft.scope,
+          id: commandDraft.id,
+          contents: commandDraft.contents,
+          filePath: commandDraft.filePath,
+        },
+        false,
+      );
+      setCommandDraft(command);
+      setSavedContents(command.contents);
+      pushToast("success", "Saved");
+    } catch (err) {
+      pushToast("error", (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleDelete() {
     if (!draft || view.screen !== "skill") return;
     if (!confirm(`Delete ${draft.tool}/${draft.id}?`)) return;
@@ -422,6 +533,27 @@ export function App() {
       );
       pushToast("success", `Deleted ${ruleDraft.id}`);
       setView({ screen: "rules", mode: view.mode, tool: view.tool });
+    } catch (err) {
+      pushToast("error", (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteCommand() {
+    if (!commandDraft || view.screen !== "command") return;
+    if (!confirm(`Delete ${commandDraft.tool}/${commandDraft.id}?`)) return;
+    setBusy(true);
+    try {
+      await api.deleteCommand(
+        effectiveRoot,
+        commandDraft.tool,
+        commandDraft.id,
+        commandDraft.scope,
+        commandDraft.filePath,
+      );
+      pushToast("success", `Deleted ${commandDraft.id}`);
+      setView({ screen: "commands", mode: view.mode, tool: view.tool });
     } catch (err) {
       pushToast("error", (err as Error).message);
     } finally {
@@ -592,6 +724,85 @@ export function App() {
     return results;
   }
 
+  async function handleBulkDeleteCommands(rows: Command[]) {
+    if (!rows.length) return;
+    const names = rows.map((r) => r.id).join(", ");
+    if (
+      !confirm(
+        `Delete ${rows.length} command${rows.length === 1 ? "" : "s"} (${names})? This removes the files.`,
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    let ok = 0;
+    const errors: string[] = [];
+    for (const r of rows) {
+      try {
+        await api.deleteCommand(effectiveRoot, r.tool, r.id, r.scope, r.filePath);
+        ok += 1;
+      } catch (err) {
+        errors.push(`${r.id}: ${(err as Error).message}`);
+      }
+    }
+    setBusy(false);
+    setCommandsVersion((v) => v + 1);
+    if (currentMode) void refreshWorkspace(currentMode);
+    if (errors.length) {
+      pushToast("error", `Deleted ${ok}, failed ${errors.length}: ${errors.join("; ")}`);
+    } else {
+      pushToast("success", `Deleted ${ok} command${ok === 1 ? "" : "s"}`);
+    }
+  }
+
+  async function handleBulkPreviewCommands(
+    sources: Command[],
+    targets: Array<{ tool: CommandTool; scope: ScopeMode }>,
+    overwrite: boolean,
+  ): Promise<CommandImportPlan["plan"]> {
+    const plan: CommandImportPlan["plan"] = [];
+    for (const s of sources) {
+      const res = await api.previewCommandImport(effectiveRoot, {
+        source: { tool: s.tool, scope: s.scope, id: s.id },
+        targets,
+        overwrite,
+      });
+      plan.push(...res.plan);
+    }
+    return plan;
+  }
+
+  async function handleBulkImportCommands(
+    sources: Command[],
+    targets: Array<{ tool: CommandTool; scope: ScopeMode }>,
+    overwrite: boolean,
+  ): Promise<CommandImportResult["results"]> {
+    setBusy(true);
+    const results: CommandImportResult["results"] = [];
+    try {
+      for (const s of sources) {
+        const res = await api.importCommand(effectiveRoot, {
+          source: { tool: s.tool, scope: s.scope, id: s.id },
+          targets,
+          overwrite,
+        });
+        results.push(...res.results);
+      }
+    } finally {
+      setBusy(false);
+    }
+    const written = results.filter((r) => r.status === "written").length;
+    const skipped = results.filter((r) => r.status === "skipped").length;
+    const failed = results.filter((r) => r.status === "error").length;
+    pushToast(
+      failed ? "error" : "success",
+      `Import finished: ${written} written, ${skipped} skipped${failed ? `, ${failed} failed` : ""}`,
+    );
+    if (currentMode) void refreshWorkspace(currentMode);
+    setCommandsVersion((v) => v + 1);
+    return results;
+  }
+
   const crumbs: Array<{ label: string; onClick?: () => void }> = [];
   if (view.screen !== "mode") {
     crumbs.push({ label: "Home", onClick: () => navigate({ screen: "mode" }) });
@@ -605,7 +816,9 @@ export function App() {
     view.screen === "skills" ||
     view.screen === "skill" ||
     view.screen === "rules" ||
-    view.screen === "rule"
+    view.screen === "rule" ||
+    view.screen === "commands" ||
+    view.screen === "command"
   ) {
     const modeLabel =
       view.mode === "project" && root.trim()
@@ -623,7 +836,9 @@ export function App() {
     view.screen === "skills" ||
     view.screen === "skill" ||
     view.screen === "rules" ||
-    view.screen === "rule"
+    view.screen === "rule" ||
+    view.screen === "commands" ||
+    view.screen === "command"
   ) {
     crumbs.push({
       label: toolLabel(view.tool),
@@ -651,14 +866,25 @@ export function App() {
   if (view.screen === "rule") {
     crumbs.push({ label: view.id });
   }
+  if (view.screen === "commands" || view.screen === "command") {
+    crumbs.push({
+      label: "Commands",
+      onClick: () => navigate({ screen: "commands", mode: view.mode, tool: view.tool }),
+    });
+  }
+  if (view.screen === "command") {
+    crumbs.push({ label: view.id });
+  }
 
   const showRootControl =
     view.screen === "project-gate" ||
     currentMode === "project" ||
     view.screen === "skill" ||
-    view.screen === "rule";
+    view.screen === "rule" ||
+    view.screen === "command";
   const rootControlForImportOnly =
-    currentMode === "global" && (view.screen === "skill" || view.screen === "rule");
+    currentMode === "global" &&
+    (view.screen === "skill" || view.screen === "rule" || view.screen === "command");
 
   return (
     <div className="app">
@@ -797,6 +1023,11 @@ export function App() {
             workspace={workspace}
             onSelectSkills={() => navigate({ screen: "skills", mode: view.mode, tool: view.tool })}
             onSelectRules={() => navigate({ screen: "rules", mode: view.mode, tool: view.tool })}
+            onSelectCommands={() => {
+              if (supportsCommands(view.tool)) {
+                navigate({ screen: "commands", mode: view.mode, tool: view.tool });
+              }
+            }}
           />
         )}
 
@@ -911,6 +1142,71 @@ export function App() {
                   tool: ruleDraft.tool,
                   scope: ruleDraft.scope,
                   id: ruleDraft.id,
+                },
+                targets,
+                overwrite,
+              });
+              pushToast("success", "Import finished");
+              if (currentMode) await refreshWorkspace(currentMode);
+              return result;
+            }}
+          />
+        )}
+
+        {view.screen === "commands" && workspace && (
+          <CommandsListView
+            key={`commands:${view.mode}:${view.tool}`}
+            mode={view.mode}
+            tool={view.tool}
+            commands={commands}
+            workspace={workspace}
+            projectRootSet={projectRootSet}
+            busy={busy}
+            onBulkDelete={handleBulkDeleteCommands}
+            onBulkPreview={handleBulkPreviewCommands}
+            onBulkImport={handleBulkImportCommands}
+            onOpen={(command) =>
+              navigate({
+                screen: "command",
+                mode: view.mode,
+                tool: view.tool,
+                id: command.id,
+                path: command.filePath,
+              })
+            }
+            onCreate={handleCreateCommand}
+          />
+        )}
+
+        {view.screen === "command" && commandDraft && workspace && (
+          <CommandDetailView
+            mode={view.mode}
+            tool={view.tool}
+            command={commandDraft}
+            workspace={workspace}
+            projectRootSet={projectRootSet}
+            busy={busy}
+            dirty={dirty}
+            onChangeContents={(contents) => setCommandDraft({ ...commandDraft, contents })}
+            onSave={handleSaveCommand}
+            onDelete={handleDeleteCommand}
+            onPreviewImport={(targets, overwrite) =>
+              api.previewCommandImport(effectiveRoot, {
+                source: {
+                  tool: commandDraft.tool,
+                  scope: commandDraft.scope,
+                  id: commandDraft.id,
+                },
+                targets,
+                overwrite,
+              })
+            }
+            onImport={async (targets, overwrite) => {
+              const result = await api.importCommand(effectiveRoot, {
+                source: {
+                  tool: commandDraft.tool,
+                  scope: commandDraft.scope,
+                  id: commandDraft.id,
                 },
                 targets,
                 overwrite,

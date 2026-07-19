@@ -112,7 +112,7 @@ Commands / Workflows remain Phase B (later).
 | Mode home | Two clear choices: Global / Project |
 | Project gate | Prefer **Continue** on the active root; recent projects secondary; typed path + Browse for new folders; persist root + up to 8 recents in `localStorage` |
 | Tools | Cards with skill + rule counts; click opens **Resources** hub |
-| Resources | Hub (`#/{mode}/{tool}`): Skills + Rules for every tool; Commands/Workflows “Coming soon” |
+| Resources | Hub (`#/{mode}/{tool}`): Skills + Rules always; Commands when the tool has a native slash-command dir; Workflows “Coming soon” |
 | Skills list | Card grid with filter; path banner; inline create; multi-select bulk delete / import |
 | Skill detail | Edit full `SKILL.md`; save/delete; import preview → apply |
 | Rules list | Multi-file rule cards or singleton instruction file (`AGENTS.md` / `GEMINI.md`) |
@@ -200,8 +200,8 @@ API must reject writes into read-only roots with a clear error.
 |------|--------|
 | Skills | Done (+ Phase A polish) |
 | Rules | **Shipped** for all skill tools (multi-file dirs + AGENTS/GEMINI singletons) |
-| Commands | Phase B (later) |
-| Workflows | Phase B (later) |
+| Commands | **Shipped** for Claude / Cursor / OpenCode / Antigravity (slash `.md` files) |
+| Workflows | Phase B (later) — Claude-native first; Antigravity slash workflows live under Commands for now |
 
 Rules principles: native paths, Global/Project split, visible paths, import across tools/scopes with dry-run preview.
 
@@ -237,6 +237,17 @@ Skill file shape: `<skillsDir>/<id>/SKILL.md`.
 | Codex | singleton | `<root>/AGENTS.md` | `$CODEX_HOME/AGENTS.md` | fixed id `agents` |
 | Zed | singleton | `<root>/AGENTS.md` | `$ZED_HOME/AGENTS.md` | fixed id `agents` (same project file as Codex) |
 | Gemini | singleton | `<root>/GEMINI.md` | `$GEMINI_HOME/GEMINI.md` | fixed id `gemini` |
+
+### 8.2 Commands / slash workflows path matrix
+
+| Tool | Project | Global | Notes |
+|------|---------|--------|-------|
+| Claude Code | `<root>/.claude/commands/<id>.md` | `~/.claude/commands/<id>.md` | slash command |
+| Cursor | `<root>/.cursor/commands/<id>.md` | `~/.cursor/commands/<id>.md` | slash command |
+| OpenCode | `<root>/.opencode/commands/<id>.md` | `~/.config/opencode/commands/` | slash command |
+| Antigravity | `<root>/.agents/workflows/<id>.md` (+ `.agent/workflows`) | `$ANTIGRAVITY_HOME/workflows/` | slash-invoked workflows |
+
+Codex / Gemini / Zed: no first-class commands directory in this matrix (skipped).
 
 ---
 
@@ -282,8 +293,8 @@ Common query: `root` (absolute project path; used for project scope and path res
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/api/health` | `{ ok, version, focus: "skills+rules" }` |
-| GET | `/api/workspace?mode=global\|project&root=` | Tools, skill/rule counts, resolved skill + rule paths (`writable`/`exists`) |
+| GET | `/api/health` | `{ ok, version, focus: "skills+rules+commands" }` |
+| GET | `/api/workspace?mode=global\|project&root=` | Tools, skill/rule/command counts, resolved paths |
 | GET | `/api/skills?tool=&scope=` | List skills (one row per physical path; `readOnly` flag) |
 | GET | `/api/skills/:tool/:id?scope=&path=` | Read one skill (`path` disambiguates duplicates) |
 | POST | `/api/skills` | Create (preferred writable dir) |
@@ -298,6 +309,11 @@ Common query: `root` (absolute project path; used for project scope and path res
 | DELETE | `/api/rules/:tool/:id?scope=&path=` | Delete rule file |
 | POST | `/api/rules/scaffold` | Scaffold template; optional `save` |
 | POST | `/api/rules/import` | Cross-tool / cross-scope copy; `dryRun` previews |
+| GET | `/api/commands?tool=&scope=` | List slash commands (supported tools only) |
+| GET/PUT/DELETE | `/api/commands/:tool/:id?scope=&path=` | Read / update / delete command file |
+| POST | `/api/commands` | Create command |
+| POST | `/api/commands/scaffold` | Scaffold (+ save) |
+| POST | `/api/commands/import` | Cross-tool / cross-scope copy; `dryRun` previews |
 | POST | `/api/pick-folder` | Native OS folder dialog; returns absolute path |
 
 ### Import request
@@ -361,8 +377,8 @@ Exit criteria met: skills feel trustworthy for daily Global ↔ Project / cross-
 ### Phase B — More resource kinds
 
 1. **Rules** — **shipped** for all skill tools (multi-file + AGENTS/GEMINI)  
-2. **Commands** — where tools support slash commands  
-3. **Workflows** — Claude-native first  
+2. **Commands** — **shipped** for Claude / Cursor / OpenCode / Antigravity  
+3. **Workflows** — Claude-native first (Antigravity workflows already under Commands)  
 
 ### Phase C — Nice-to-have
 

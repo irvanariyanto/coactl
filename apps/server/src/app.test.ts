@@ -38,7 +38,7 @@ describe("api basics", () => {
     expect(res.status).toBe(200);
     const body = await json(res);
     expect(body.ok).toBe(true);
-    expect(body.focus).toBe("skills+rules");
+    expect(body.focus).toBe("skills+rules+commands");
   });
 
   it("rejects unsupported tools with 400", async () => {
@@ -414,5 +414,47 @@ describe("rules crud + import", () => {
     const { results } = await json(apply);
     expect(results[0].status).toBe("written");
     expect(readFileSync(results[0].filePath, "utf-8")).toContain("Use REST");
+  });
+});
+
+describe("commands crud + import", () => {
+  it("creates and imports a slash command", async () => {
+    const root = tempRoot();
+
+    const create = await app.request(`/api/commands?root=${root}`, {
+      method: "POST",
+      body: JSON.stringify({
+        tool: "claude-code",
+        scope: "project",
+        id: "review-pr",
+        description: "Review a PR",
+        body: "# Review\n\n$ARGUMENTS\n",
+      }),
+    });
+    expect(create.status).toBe(201);
+    const created = await json(create);
+    expect(created.command.filePath).toContain(join(".claude", "commands", "review-pr.md"));
+    expect(created.command.kind).toBe("command");
+
+    const preview = await app.request(`/api/commands/import?root=${root}`, {
+      method: "POST",
+      body: JSON.stringify({
+        source: { tool: "claude-code", scope: "project", id: "review-pr" },
+        targets: [{ tool: "cursor", scope: "project" }],
+        dryRun: true,
+      }),
+    });
+    expect((await json(preview)).plan[0].action).toBe("write");
+
+    const apply = await app.request(`/api/commands/import?root=${root}`, {
+      method: "POST",
+      body: JSON.stringify({
+        source: { tool: "claude-code", scope: "project", id: "review-pr" },
+        targets: [{ tool: "antigravity", scope: "project" }],
+      }),
+    });
+    const { results } = await json(apply);
+    expect(results[0].status).toBe("written");
+    expect(results[0].filePath).toContain(join(".agents", "workflows", "review-pr.md"));
   });
 });

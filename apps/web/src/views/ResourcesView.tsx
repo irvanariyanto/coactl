@@ -1,4 +1,4 @@
-import { toolLabel, type Mode, type SkillTool } from "../nav";
+import { toolLabel, supportsCommands, type Mode, type SkillTool } from "../nav";
 import type { Workspace } from "../api";
 import { PathCandidates } from "../components/PathCandidates";
 
@@ -8,15 +8,25 @@ interface Props {
   workspace: Workspace;
   onSelectSkills: () => void;
   onSelectRules: () => void;
+  onSelectCommands: () => void;
 }
 
 /** Hub for resource kinds — Skills + Rules for every skill-capable tool. */
-export function ResourcesView({ mode, tool, workspace, onSelectSkills, onSelectRules }: Props) {
+export function ResourcesView({
+  mode,
+  tool,
+  workspace,
+  onSelectSkills,
+  onSelectRules,
+  onSelectCommands,
+}: Props) {
   const skillPaths = workspace.skillPathsByTool[tool];
   const rulePaths = workspace.rulePathsByTool[tool];
+  const commandPaths = supportsCommands(tool) ? workspace.commandPathsByTool[tool] : undefined;
   const layout = workspace.ruleLayoutsByTool[tool];
   const activeSkills = mode === "global" ? skillPaths?.global : skillPaths?.project;
   const activeRules = mode === "global" ? rulePaths?.global : rulePaths?.project;
+  const activeCommands = mode === "global" ? commandPaths?.global : commandPaths?.project;
   const skillCount =
     mode === "global"
       ? workspace.toolSkillCounts[tool]?.global ?? 0
@@ -25,11 +35,23 @@ export function ResourcesView({ mode, tool, workspace, onSelectSkills, onSelectR
     mode === "global"
       ? workspace.toolRuleCounts[tool]?.global ?? 0
       : workspace.toolRuleCounts[tool]?.project ?? 0;
+  const commandCount = supportsCommands(tool)
+    ? mode === "global"
+      ? workspace.toolCommandCounts[tool]?.global ?? 0
+      : workspace.toolCommandCounts[tool]?.project ?? 0
+    : 0;
 
   const ruleBlurb =
     layout?.shape === "singleton"
       ? `${ruleCount ? "1" : "0"} instruction file (${tool === "gemini" ? "GEMINI.md" : "AGENTS.md"})`
       : `${ruleCount} rule file${ruleCount === 1 ? "" : "s"} (.${layout?.extension ?? "md"})`;
+
+  const commandKind = activeCommands?.kind ?? "command";
+  const commandBlurb = supportsCommands(tool)
+    ? commandKind === "workflow"
+      ? `${commandCount} workflow file${commandCount === 1 ? "" : "s"} (.md)`
+      : `${commandCount} command file${commandCount === 1 ? "" : "s"} (.md)`
+    : "Coming soon";
 
   const kinds = [
     {
@@ -44,7 +66,12 @@ export function ResourcesView({ mode, tool, workspace, onSelectSkills, onSelectR
       enabled: true,
       blurb: ruleBlurb,
     },
-    { id: "commands" as const, label: "Commands", enabled: false, blurb: "Coming soon" },
+    {
+      id: "commands" as const,
+      label: "Commands",
+      enabled: supportsCommands(tool),
+      blurb: commandBlurb,
+    },
     { id: "workflows" as const, label: "Workflows", enabled: false, blurb: "Coming soon" },
   ];
 
@@ -67,6 +94,16 @@ export function ResourcesView({ mode, tool, workspace, onSelectSkills, onSelectR
           />
         </div>
       )}
+      {activeCommands && (
+        <div style={{ marginTop: "0.65rem" }}>
+          <PathCandidates
+            info={activeCommands}
+            label={
+              commandKind === "workflow" ? "Active workflows path" : "Active commands path"
+            }
+          />
+        </div>
+      )}
       <div className="tool-grid" style={{ marginTop: "1rem" }}>
         {kinds.map((kind) => (
           <button
@@ -77,6 +114,7 @@ export function ResourcesView({ mode, tool, workspace, onSelectSkills, onSelectR
             onClick={() => {
               if (kind.id === "skills") onSelectSkills();
               if (kind.id === "rules") onSelectRules();
+              if (kind.id === "commands") onSelectCommands();
             }}
           >
             <span className="tool-card-head">
