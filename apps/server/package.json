@@ -12,10 +12,12 @@
   "dependencies": {
     "@coactl/domain": "*",
     "@hono/node-server": "^1.13.7",
+    "better-sqlite3": "^12.11.1",
     "hono": "^4.6.12",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.5.5",
     "tsx": "^4.19.1",
     "typescript": "^5.6.2",

@@ -236,6 +236,26 @@ export interface AuthStatus {
   authFilePath: string;
 }
 
+export interface ProfileState {
+  activeProject: string | null;
+  recentProjects: string[];
+  databasePath: string;
+  schemaVersion: number;
+}
+
+export interface ProfileExportDocument {
+  format: "coactl-profile";
+  version: 1;
+  exportedAt: string;
+  settings: { activeProject: string | null };
+  projects: Array<{ path: string; lastOpenedAt: string }>;
+}
+
+export interface ProfileImportPreview {
+  activeProject: string | null;
+  projects: Array<{ path: string; exists: boolean; action: "add" | "update" | "remove" }>;
+}
+
 export interface RemoteSkillCandidate {
   id: string;
   name: string;
@@ -349,6 +369,30 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  profile() {
+    return request<ProfileState>("/api/profile");
+  },
+  saveProfile(body: { activeProject?: string | null; recentProjects?: string[] }) {
+    return request<ProfileState>("/api/profile", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
+  },
+  exportProfile() {
+    return request<ProfileExportDocument>("/api/profile/export");
+  },
+  previewProfileImport(document: unknown) {
+    return request<ProfileImportPreview>("/api/profile/import", {
+      method: "POST",
+      body: JSON.stringify({ document, dryRun: true }),
+    });
+  },
+  importProfile(document: unknown) {
+    return request<ProfileState>("/api/profile/import", {
+      method: "POST",
+      body: JSON.stringify({ document, dryRun: false }),
+    });
+  },
   authStatus() {
     return request<AuthStatus>("/api/auth/status");
   },

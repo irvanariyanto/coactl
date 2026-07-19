@@ -6,6 +6,9 @@ Local web app that manages **native AI coding skills and rules** with a clear **
 
 No `.coactl` registry — files stay in each tool’s own folders.
 
+coactl keeps its own project history and UI profile in SQLite at `~/.coactl/coactl.db`. Native
+tool files remain the source of truth and are not copied into the database.
+
 ## User flow
 
 ```
@@ -46,6 +49,15 @@ Safety rules:
   but create/update/delete/import-to are blocked in both the UI and the API.
 - The same skill id in two candidate dirs (e.g. Codex `.agents/skills` and `.codex/skills`)
   is listed once **per physical path**; new skills always go to the preferred write target.
+
+## Portable profile
+
+The home screen can export project history and app settings to a versioned
+`coactl-profile-YYYY-MM-DD.json` document. Import always previews added, updated, and removed project entries
+before applying them transactionally to SQLite. Login hashes, session secrets, editor drafts, and
+native tool files are excluded.
+
+Set `COACTL_DB_FILE` to override the default SQLite location.
 
 ## Quick start
 
@@ -132,6 +144,9 @@ OS user.
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/api/workspace?mode=global\|project&root=` | Tools + skill/rule counts + resolved paths |
+| GET/PUT | `/api/profile` | Read or update the SQLite-backed portable profile |
+| GET | `/api/profile/export` | Export a versioned profile document without credentials |
+| POST | `/api/profile/import` | Preview or apply a portable profile import |
 | GET | `/api/skills?tool=&scope=` | List skills (one row per physical path, `readOnly` flag) |
 | GET/PUT/DELETE | `/api/skills/:tool/:id?scope=&path=` | Read / update / delete (optional `path` picks a duplicate) |
 | POST | `/api/skills` | Create (always the preferred writable dir) |

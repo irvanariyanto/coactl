@@ -9,7 +9,7 @@
 
 ## 1. Summary
 
-**coactl** is a **local-only web app** that helps developers discover installed AI coding tools and manage their **native skills** in place — without a central `.coactl` registry.
+**coactl** is a **local-only web app** that helps developers discover installed AI coding tools and manage their **native skills** in place — without a central `.coactl` registry. App metadata such as recent projects persists separately in SQLite.
 
 **Positioning:** manage native skills across AI coding tools, with a clear **Global vs Project** split (not “define once, sync everywhere” from the legacy CLI).
 
@@ -279,6 +279,8 @@ Browser (Vite + React)  --HTTP JSON-->  Hono API (127.0.0.1:8787)
 | `apps/server` | Local REST API, localhost bind only |
 | `packages/domain` | Detection, path resolution, skill + rule IO |
 
+SQLite at `~/.coactl/coactl.db` stores coactl-owned profile metadata only. Native tool directories remain authoritative. Portable profile exports exclude authentication data and native resource contents.
+
 **Runtime:** Node ≥ 20, TypeScript ESM monorepo.
 
 **Security defaults:**
@@ -301,6 +303,9 @@ Common query: `root` (absolute project path; used for project scope and path res
 | Method | Path | Notes |
 |--------|------|-------|
 | GET | `/api/health` | `{ ok, version, focus: "skills+rules+commands+workflows" }` |
+| GET/PUT | `/api/profile` | SQLite-backed active/recent project profile |
+| GET | `/api/profile/export` | Versioned portable profile document |
+| POST | `/api/profile/import` | Preview (`dryRun`) or transactionally apply profile import |
 | GET | `/api/workspace?mode=global\|project&root=` | Tools, skill/rule/command/workflow counts, resolved paths |
 | GET | `/api/skills?tool=&scope=` | List skills (one row per physical path; `readOnly` flag) |
 | GET | `/api/skills/:tool/:id?scope=&path=` | Read one skill (`path` disambiguates duplicates) |

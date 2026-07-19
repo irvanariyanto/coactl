@@ -11,6 +11,8 @@ const fixtureRoot = join(dirname(fileURLToPath(import.meta.url)), "..", ".test-t
 beforeAll(() => {
   mkdirSync(fixtureRoot, { recursive: true });
   process.env.COACTL_AUTH_FILE = join(fixtureRoot, "auth-disabled.json");
+  process.env.COACTL_DB_FILE = join(fixtureRoot, "profile-test.db");
+  rmSync(process.env.COACTL_DB_FILE, { force: true });
   writeFileSync(
     process.env.COACTL_AUTH_FILE,
     JSON.stringify({ version: 1, enabled: false, salt: "", hash: "", sessionSecret: "" }),
@@ -93,6 +95,70 @@ describe("api basics", () => {
     expect(body.rulePathsByTool.cursor.project.preferred).toContain(join(".cursor", "rules"));
     expect(body.rulePathsByTool.codex.project.preferred).toContain("AGENTS.md");
     expect(body.toolRuleCounts.cursor.project).toBe(0);
+  });
+});
+
+describe("SQLite profile storage", () => {
+  it("persists active and recent projects", async () => {
+    const update = await app.request("/api/profile", {
+      method: "PUT",
+      body: JSON.stringify({
+        activeProject: "/work/current",
+        recentProjects: ["/work/current", "/work/other"],
+      }),
+    });
+    expect(update.status).toBe(200);
+    const saved = await json(update);
+    expect(saved.activeProject).toBe("/work/current");
+    expect(saved.recentProjects).toEqual(["/work/current", "/work/other"]);
+    expect(saved.databasePath).toBe(process.env.COACTL_DB_FILE);
+    expect(saved.schemaVersion).toBe(1);
+
+    const read = await app.request("/api/profile");
+    expect((await json(read)).recentProjects).toEqual(["/work/current", "/work/other"]);
+  });
+
+  it("exports, previews, validates, and applies profile imports", async () => {
+    const exported = await json(await app.request("/api/profile/export"));
+    expect(exported.format).toBe("coactl-profile");
+    expect(exported.version).toBe(1);
+    expect(exported).not.toHaveProperty("auth");
+
+    const document = {
+      ...exported,
+      settings: { activeProject: "/imported/project" },
+      projects: [
+        { path: "/work/current", lastOpenedAt: "2026-07-19T00:00:00.000Z" },
+        { path: "/imported/project", lastOpenedAt: "2026-07-20T00:00:00.000Z" },
+      ],
+    };
+    const preview = await app.request("/api/profile/import", {
+      method: "POST",
+      body: JSON.stringify({ document, dryRun: true }),
+    });
+    const plan = await json(preview);
+    expect(plan.projects).toEqual([
+      { path: "/work/current", exists: true, action: "update" },
+      { path: "/imported/project", exists: false, action: "add" },
+      { path: "/work/other", exists: true, action: "remove" },
+    ]);
+
+    const apply = await app.request("/api/profile/import", {
+      method: "POST",
+      body: JSON.stringify({ document, dryRun: false }),
+    });
+    expect((await json(apply)).activeProject).toBe("/imported/project");
+    expect((await json(await app.request("/api/profile"))).recentProjects).toEqual([
+      "/imported/project",
+      "/work/current",
+    ]);
+
+    const invalid = await app.request("/api/profile/import", {
+      method: "POST",
+      body: JSON.stringify({ document: { format: "coactl-profile", version: 99 }, dryRun: true }),
+    });
+    expect(invalid.status).toBe(400);
+    expect((await json(await app.request("/api/profile"))).activeProject).toBe("/imported/project");
   });
 });
 

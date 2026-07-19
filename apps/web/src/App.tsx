@@ -9,6 +9,7 @@ import {
   type CommandTool,
   type ImportPlan,
   type ImportResult,
+  type ProfileState,
   type Rule,
   type RuleImportPlan,
   type RuleImportResult,
@@ -101,7 +102,9 @@ export function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [busy, setBusy] = useState(false);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
+  const [profile, setProfile] = useState<ProfileState | null>(null);
   const toastId = useRef(0);
+  const profileLoaded = useRef(false);
 
   const effectiveRoot = root.trim() || ".";
   const projectRootSet = Boolean(root.trim());
@@ -235,6 +238,32 @@ export function App() {
   useEffect(() => {
     localStorage.setItem("coactl.root", root.trim());
   }, [root]);
+
+  useEffect(() => {
+    if (!auth || authLocked || profileLoaded.current) return;
+    profileLoaded.current = true;
+    void api
+      .profile()
+      .then(async (stored) => {
+        if (!stored.activeProject && stored.recentProjects.length === 0 && (root.trim() || recent.length)) {
+          const migrated = await api.saveProfile({
+            activeProject: root.trim() || null,
+            recentProjects: recent,
+          });
+          setProfile(migrated);
+          return;
+        }
+        setProfile(stored);
+        setRoot(stored.activeProject ?? "");
+        setRecent(stored.recentProjects);
+        localStorage.setItem("coactl.root", stored.activeProject ?? "");
+        localStorage.setItem("coactl.recentRoots", JSON.stringify(stored.recentProjects));
+      })
+      .catch((err) => {
+        profileLoaded.current = false;
+        pushToast("error", (err as Error).message);
+      });
+  }, [auth, authLocked, pushToast, recent, root]);
 
   useEffect(() => {
     if (authLocked || !currentMode) return;
@@ -518,7 +547,12 @@ export function App() {
   function rememberRoot(path: string) {
     const trimmed = path.trim();
     if (!trimmed) return;
-    setRecent(rememberProject(trimmed));
+    const next = rememberProject(trimmed);
+    setRecent(next);
+    void api
+      .saveProfile({ activeProject: trimmed, recentProjects: next })
+      .then(setProfile)
+      .catch((err) => pushToast("error", (err as Error).message));
   }
 
   function selectProject(path: string) {
@@ -564,7 +598,12 @@ export function App() {
   }
 
   function handleForgetRecent(path: string) {
-    setRecent(forgetProject(path));
+    const next = forgetProject(path);
+    setRecent(next);
+    void api
+      .saveProfile({ recentProjects: next })
+      .then(setProfile)
+      .catch((err) => pushToast("error", (err as Error).message));
   }
 
   async function handleCreate(id: string) {
@@ -1563,6 +1602,14 @@ export function App() {
             auth={auth}
             onAuthChange={setAuth}
             onToast={pushToast}
+            profile={profile}
+            onProfileImported={(next) => {
+              setProfile(next);
+              setRoot(next.activeProject ?? "");
+              setRecent(next.recentProjects);
+              localStorage.setItem("coactl.root", next.activeProject ?? "");
+              localStorage.setItem("coactl.recentRoots", JSON.stringify(next.recentProjects));
+            }}
           />
         )}
 

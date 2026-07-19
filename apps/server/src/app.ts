@@ -74,6 +74,13 @@ import {
   setSessionCookie,
   verifyPassword,
 } from "./auth.js";
+import {
+  exportProfile,
+  getProfileState,
+  importProfile,
+  previewProfileImport,
+  saveProfileState,
+} from "./profile-store.js";
 
 type Variables = {
   projectRoot: string;
@@ -113,6 +120,34 @@ app.use("/api/*", async (c, next) => {
 app.get("/api/health", (c) =>
   c.json({ ok: true, version: "0.3.0", focus: "skills+rules+commands+workflows" }),
 );
+
+app.get("/api/profile", (c) => c.json(getProfileState()));
+
+app.put("/api/profile", async (c) => {
+  const body = z
+    .object({
+      activeProject: z.string().nullable().optional(),
+      recentProjects: z.array(z.string()).max(8).optional(),
+    })
+    .safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: "Invalid profile state" }, 400);
+  return c.json(saveProfileState(body.data));
+});
+
+app.get("/api/profile/export", (c) => c.json(exportProfile()));
+
+app.post("/api/profile/import", async (c) => {
+  const body = z
+    .object({ document: z.unknown(), dryRun: z.boolean().optional() })
+    .safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: "Profile document is required" }, 400);
+  try {
+    if (body.data.dryRun !== false) return c.json(previewProfileImport(body.data.document));
+    return c.json(importProfile(body.data.document));
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 400);
+  }
+});
 
 app.get("/api/auth/status", (c) => c.json(getAuthStatus(c)));
 
