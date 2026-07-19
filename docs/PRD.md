@@ -105,7 +105,7 @@ Home
 | Screen | Requirements |
 |--------|----------------|
 | Mode home | Two clear choices: Global / Project |
-| Project gate | Block until project root is set; persist root in `localStorage` |
+| Project gate | Block until project root is set; persist active root + recent projects (up to 8) in `localStorage`; switch via list, top-bar select, or Browse |
 | Tools | Cards with skill count, resolved path, installed / in-project / path-ok badges |
 | Resources | Skills enabled; other kinds disabled with “Coming soon”; show project + global path candidates |
 | Skills list | Card grid for selected tool + mode with filter; folder + per-skill path; inline create panel; multi-select with bulk delete and bulk import (preview → apply) |

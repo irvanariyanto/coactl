@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type ImportPlan, type ImportResult, type ScopeMode, type Skill, type SkillTool, type Workspace } from "./api";
 import { modeToScope, parseHash, toolLabel, viewToHash, type Mode, type View } from "./nav";
+import {
+  forgetProject,
+  loadRecentProjects,
+  projectBasename,
+  rememberProject,
+} from "./recent-projects";
 import { ModeHomeView } from "./views/ModeHomeView";
 import { ProjectGateView } from "./views/ProjectGateView";
 import { ResourcesView } from "./views/ResourcesView";
@@ -18,6 +24,12 @@ const UNSAVED_PROMPT = "You have unsaved changes to this skill. Discard them?";
 
 export function App() {
   const [root, setRoot] = useState(() => localStorage.getItem("coactl.root") || "");
+  const [recent, setRecent] = useState<string[]>(() => {
+    const list = loadRecentProjects();
+    const current = localStorage.getItem("coactl.root")?.trim();
+    // Seed the list with the active root so the first switch has something useful.
+    return current && !list.includes(current) ? rememberProject(current) : list;
+  });
   const [view, setView] = useState<View>(() => {
     const fromHash = parseHash(window.location.hash);
     if (!fromHash) return { screen: "mode" };
@@ -175,9 +187,28 @@ export function App() {
     };
   }, [view, effectiveRoot, pushToast]);
 
+  function rememberRoot(path: string) {
+    const trimmed = path.trim();
+    if (!trimmed) return;
+    setRecent(rememberProject(trimmed));
+  }
+
+  function selectProject(path: string) {
+    const trimmed = path.trim();
+    if (!trimmed) return;
+    setRoot(trimmed);
+    rememberRoot(trimmed);
+  }
+
   function goMode(mode: Mode) {
-    if (mode === "project" && !root.trim()) {
-      navigate({ screen: "project-gate" });
+    if (mode === "project") {
+      // No root yet, or several recent projects to choose from → show the picker.
+      if (!root.trim() || recent.length > 1) {
+        navigate({ screen: "project-gate" });
+        return;
+      }
+      rememberRoot(root);
+      navigate({ screen: "tools", mode });
       return;
     }
     navigate({ screen: "tools", mode });
@@ -186,10 +217,14 @@ export function App() {
   async function handlePickFolder() {
     try {
       const { path } = await api.pickFolder();
-      setRoot(path);
+      selectProject(path);
     } catch (err) {
       pushToast("error", (err as Error).message);
     }
+  }
+
+  function handleForgetRecent(path: string) {
+    setRecent(forgetProject(path));
   }
 
   async function handleCreate(id: string) {
@@ -398,16 +433,53 @@ export function App() {
 
         {showRootControl && (
           <div className="root-control">
+            {recent.length > 0 && (
+              <select
+                className="recent-select"
+                aria-label="Switch project"
+                value={root.trim()}
+                onChange={(e) => {
+                  if (!e.target.value) return;
+                  selectProject(e.target.value);
+                }}
+              >
+                {!recent.includes(root.trim()) && root.trim() && (
+                  <option value={root.trim()}>{projectBasename(root.trim())}</option>
+                )}
+                {recent.map((path) => (
+                  <option key={path} value={path}>
+                    {projectBasename(path)}
+                  </option>
+                ))}
+              </select>
+            )}
             <input
               id="root"
               aria-label="Project root"
               value={root}
               onChange={(e) => setRoot(e.target.value)}
+              onBlur={() => {
+                if (root.trim()) rememberRoot(root);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && root.trim()) rememberRoot(root);
+              }}
               placeholder="/path/to/project"
+              title={root.trim() || undefined}
             />
             <button type="button" onClick={() => void handlePickFolder()}>
               Browse…
             </button>
+            {(currentMode === "project" || view.screen === "project-gate") && (
+              <button
+                type="button"
+                className="ghost"
+                title="Open project picker"
+                onClick={() => navigate({ screen: "project-gate" })}
+              >
+                Projects
+              </button>
+            )}
           </div>
         )}
 
@@ -415,7 +487,10 @@ export function App() {
           <button
             type="button"
             className="ghost"
-            onClick={() => void refreshWorkspace(currentMode)}
+            onClick={() => {
+              if (currentMode === "project" && root.trim()) rememberRoot(root);
+              void refreshWorkspace(currentMode);
+            }}
             disabled={busy}
           >
             Refresh
@@ -446,10 +521,17 @@ export function App() {
         {view.screen === "project-gate" && (
           <ProjectGateView
             root={root}
+            recent={recent}
             onRootChange={setRoot}
             onPickFolder={() => void handlePickFolder()}
+            onSelectRecent={(path) => {
+              selectProject(path);
+              navigate({ screen: "tools", mode: "project" });
+            }}
+            onForgetRecent={handleForgetRecent}
             onContinue={() => {
               if (!root.trim()) return;
+              rememberRoot(root);
               navigate({ screen: "tools", mode: "project" });
             }}
           />
@@ -554,6 +636,5 @@ export function App() {
 }
 
 function basename(path: string): string {
-  const parts = path.replace(/\/+$/, "").split("/");
-  return parts[parts.length - 1] || path;
+  return projectBasename(path);
 }
