@@ -25,6 +25,7 @@ import {
 } from "./api";
 import { ResourceKindSwitcher } from "./components/ResourceKindSwitcher";
 import { AppSidebar } from "./components/AppSidebar";
+import { ThemeToggle, type Theme } from "./components/ThemeToggle";
 import {
   modeToScope,
   parseHash,
@@ -107,6 +108,9 @@ export function App() {
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [profile, setProfile] = useState<ProfileState | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [theme, setTheme] = useState<Theme>(() =>
+    document.documentElement.dataset.theme === "light" ? "light" : "dark",
+  );
   const toastId = useRef(0);
   const profileLoaded = useRef(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -248,6 +252,11 @@ export function App() {
   useEffect(() => {
     localStorage.setItem("coactl.root", root.trim());
   }, [root]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("coactl.theme", theme);
+  }, [theme]);
 
   useEffect(() => {
     if (!auth || authLocked || profileLoaded.current) return;
@@ -1492,6 +1501,11 @@ export function App() {
               coa<em>ctl</em>
             </span>
           </div>
+          <div className="topbar-spacer" />
+          <ThemeToggle
+            theme={theme}
+            onToggle={() => setTheme((current) => current === "dark" ? "light" : "dark")}
+          />
         </header>
         <main className="content">
           <p className="muted">Checking login status…</p>
@@ -1501,7 +1515,13 @@ export function App() {
   }
 
   if (auth.enabled && !auth.unlocked) {
-    return <UnlockView onLoggedIn={setAuth} />;
+    return (
+      <UnlockView
+        onLoggedIn={setAuth}
+        theme={theme}
+        onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")}
+      />
+    );
   }
 
   return (
@@ -1537,6 +1557,11 @@ export function App() {
         <div className="topbar-spacer" />
 
         {busy && <span className="busy-dot" aria-label="Working" />}
+
+        <ThemeToggle
+          theme={theme}
+          onToggle={() => setTheme((current) => current === "dark" ? "light" : "dark")}
+        />
 
         {needsProjectRoot && (
           <button

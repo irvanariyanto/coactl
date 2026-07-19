@@ -1,11 +1,14 @@
 import { useState, type FormEvent } from "react";
 import { api, type AuthStatus } from "../api";
+import { ThemeToggle, type Theme } from "../components/ThemeToggle";
 
 interface Props {
   onLoggedIn: (status: AuthStatus) => void;
+  theme: Theme;
+  onToggleTheme: () => void;
 }
 
-export function UnlockView({ onLoggedIn }: Props) {
+export function UnlockView({ onLoggedIn, theme, onToggleTheme }: Props) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -33,6 +36,8 @@ export function UnlockView({ onLoggedIn }: Props) {
             coa<em>ctl</em>
           </span>
         </div>
+        <div className="topbar-spacer" />
+        <ThemeToggle theme={theme} onToggle={onToggleTheme} />
       </header>
       <main className="content unlock-content">
         <form className="unlock-card" onSubmit={(e) => void submit(e)}>

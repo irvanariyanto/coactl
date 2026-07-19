@@ -22,6 +22,9 @@ The persistent sidebar provides direct access to scopes, recent projects, the cu
 resource kinds, Portable Profile, and Login & Security. On smaller screens it becomes an
 accessible drawer; existing hash URLs and breadcrumbs remain unchanged.
 
+The top bar includes a persistent Light/Dark theme toggle. First use follows the operating-system
+preference, then stores the explicit choice in the browser.
+
 | Mode | Entry | Tools shown | Managed |
 |------|-------|-------------|---------|
 | **Global** | One click | Installed on the machine | `~/…/skills`, `~/…/rules` |
