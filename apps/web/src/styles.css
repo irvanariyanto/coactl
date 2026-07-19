@@ -966,7 +966,7 @@ textarea:read-only {
 }
 
 .kind-switcher {
-  display: inline-flex;
+  display: none;
   flex-wrap: wrap;
   align-self: flex-start;
   gap: 0.2rem;
@@ -1003,6 +1003,12 @@ textarea:read-only {
 .kind-switcher-btn:focus-visible {
   outline: none;
   box-shadow: var(--ring);
+}
+
+@media (max-width: 900px) {
+  .kind-switcher {
+    display: inline-flex;
+  }
 }
 
 .crumb-link {

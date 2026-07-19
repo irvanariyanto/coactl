@@ -1,6 +1,6 @@
 # coactl (web)
 
-**Version:** 0.4.0 · **Related:** [docs/PRD.md](docs/PRD.md) · Legacy CLI frozen at tag `cli-v0.1.0` / branch `archive/cli-v0.1`
+**Version:** 0.4.1 · **Related:** [docs/PRD.md](docs/PRD.md) · Legacy CLI frozen at tag `cli-v0.1.0` / branch `archive/cli-v0.1`
 
 Local web app that manages **native AI coding skills and rules** with a clear **Global vs Project** flow.
 
@@ -210,6 +210,12 @@ packages/domain/   detection, skill/rule IO, import
 ```
 
 ## Releases
+
+### 0.4.1
+
+Refresh now reloads workspace metadata and the active resource view while protecting unsaved editor
+changes. Desktop resource navigation lives in the sidebar, with compact tabs retained on smaller
+screens to avoid duplicate controls without reducing mobile usability.
 
 ### 0.4.0
 

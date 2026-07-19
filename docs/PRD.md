@@ -1,6 +1,6 @@
 # coactl — Product Requirements Document (PRD)
 
-**Version:** 0.4.0 (remote packs, portable profiles, responsive shell, themes)
+**Version:** 0.4.1 (active-view refresh and streamlined responsive navigation)
 
 **Status:** Living document — as-built product plus agreed next priorities  
 **Last updated:** 2026-07-19  

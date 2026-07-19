@@ -415,7 +415,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [authLocked, view, effectiveRoot, pushToast]);
+  }, [authLocked, view, effectiveRoot, pushToast, skillsVersion]);
 
   useEffect(() => {
     if (authLocked) return;
@@ -451,7 +451,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [authLocked, view, effectiveRoot, pushToast]);
+  }, [authLocked, view, effectiveRoot, pushToast, rulesVersion]);
 
   useEffect(() => {
     if (authLocked) return;
@@ -487,7 +487,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [authLocked, view, effectiveRoot, pushToast]);
+  }, [authLocked, view, effectiveRoot, pushToast, commandsVersion]);
 
   useEffect(() => {
     if (authLocked) return;
@@ -523,7 +523,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [authLocked, view, effectiveRoot, pushToast]);
+  }, [authLocked, view, effectiveRoot, pushToast, workflowsVersion]);
 
   // Autosave dirty editor contents to localStorage (survives refresh).
   useEffect(() => {
@@ -1491,6 +1491,37 @@ export function App() {
     closeSidebar();
   }
 
+  async function refreshCurrentView() {
+    if (!currentMode) return;
+    if (dirty && !window.confirm("Refresh this view and discard unsaved changes?")) return;
+
+    if (dirty) {
+      if (view.screen === "skill" && draft) {
+        clearDraft("skill", draft.tool, draft.scope, draft.id, draft.filePath);
+      } else if (view.screen === "rule" && ruleDraft) {
+        clearDraft("rule", ruleDraft.tool, ruleDraft.scope, ruleDraft.id, ruleDraft.filePath);
+      } else if (view.screen === "command" && commandDraft) {
+        clearDraft("command", commandDraft.tool, commandDraft.scope, commandDraft.id, commandDraft.filePath);
+      } else if (view.screen === "workflow" && workflowDraft) {
+        clearDraft("workflow", workflowDraft.tool, workflowDraft.scope, workflowDraft.id, workflowDraft.filePath);
+      }
+      setPendingDraft(null);
+    }
+
+    if (currentMode === "project" && root.trim()) rememberRoot(root);
+    await refreshWorkspace(currentMode);
+
+    if (view.screen === "skills" || view.screen === "skill") {
+      setSkillsVersion((version) => version + 1);
+    } else if (view.screen === "rules" || view.screen === "rule") {
+      setRulesVersion((version) => version + 1);
+    } else if (view.screen === "commands" || view.screen === "command") {
+      setCommandsVersion((version) => version + 1);
+    } else if (view.screen === "workflows" || view.screen === "workflow") {
+      setWorkflowsVersion((version) => version + 1);
+    }
+  }
+
   if (!auth) {
     return (
       <div className="app">
@@ -1579,10 +1610,8 @@ export function App() {
           <button
             type="button"
             className="ghost"
-            onClick={() => {
-              if (currentMode === "project" && root.trim()) rememberRoot(root);
-              void refreshWorkspace(currentMode);
-            }}
+            title="Refresh workspace metadata and the current view"
+            onClick={() => void refreshCurrentView()}
             disabled={busy}
           >
             Refresh
