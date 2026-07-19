@@ -10,3 +10,4 @@ export * from "./workflow-paths.js";
 export * from "./workflows.js";
 export * from "./remote-git-skills.js";
 export * from "./remote-pack-skills.js";
+export * from "./remote-skill-source.js";

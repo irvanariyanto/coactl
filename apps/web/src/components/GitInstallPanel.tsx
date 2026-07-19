@@ -6,6 +6,7 @@ import type {
   PackSkillsPreview,
   RemoteSkillCandidate,
   ScopeMode,
+  SmartSkillsPreview,
   SkillTool,
 } from "../api";
 import { toolLabel } from "../nav";
@@ -25,6 +26,12 @@ interface Props {
       | { kind: "npm"; install: string; registry?: string; subpath?: string }
       | { kind: "archive"; path?: string; url?: string; subpath?: string },
   ) => Promise<PackSkillsPreview>;
+  onPreviewSmart: (input: {
+    source: string;
+    branch?: string;
+    registry?: string;
+    subpath?: string;
+  }) => Promise<SmartSkillsPreview>;
   onPickArchive: () => Promise<{ path: string } | { cancelled: true }>;
   onPreviewInstall: (
     skills: Array<{ id: string; contents: string }>,
@@ -42,11 +49,14 @@ export function GitInstallPanel({
   busy,
   onPreviewRepo,
   onPreviewPack,
+  onPreviewSmart,
   onPickArchive,
   onPreviewInstall,
   onInstall,
 }: Props) {
   const [url, setUrl] = useState("");
+  const [smartSource, setSmartSource] = useState("");
+  const [detectedKind, setDetectedKind] = useState<SmartSkillsPreview["kind"] | null>(null);
   const [sourceTab, setSourceTab] = useState<"git" | "pack">("git");
   const [packKind, setPackKind] = useState<"npm" | "archive">("npm");
   const [npmInstall, setNpmInstall] = useState("");
@@ -68,6 +78,39 @@ export function GitInstallPanel({
     return candidates
       .filter((s) => selected.has(s.repoPath))
       .map((s) => ({ id: s.id, contents: s.contents }));
+  }
+
+  function applyPreview(preview: { skills: RemoteSkillCandidate[] }, kind?: SmartSkillsPreview["kind"]) {
+    setCandidates(preview.skills);
+    setSelected(new Set(preview.skills.map((skill) => skill.repoPath)));
+    setDetectedKind(kind ?? null);
+    if (preview.skills.length === 0) {
+      setError("No SKILL.md files found in that source (try a subpath like skills/).");
+    }
+  }
+
+  async function scanSmartSource() {
+    setWorking(true);
+    setError(null);
+    setPlan(null);
+    setResults(null);
+    setDiffKey(null);
+    setDetectedKind(null);
+    try {
+      const preview = await onPreviewSmart({
+        source: smartSource.trim(),
+        branch: branch.trim() || undefined,
+        registry: registry.trim() || undefined,
+        subpath: subpath.trim() || undefined,
+      });
+      applyPreview(preview, preview.kind);
+    } catch (err) {
+      setCandidates(null);
+      setSelected(new Set());
+      setError((err as Error).message);
+    } finally {
+      setWorking(false);
+    }
   }
 
   async function scanSource() {
@@ -100,11 +143,7 @@ export function GitInstallPanel({
                     subpath: subpath.trim() || undefined,
                   },
             );
-      setCandidates(preview.skills);
-      setSelected(new Set(preview.skills.map((s) => s.repoPath)));
-      if (preview.skills.length === 0) {
-        setError("No SKILL.md files found in that source (try a subpath like skills/).");
-      }
+      applyPreview(preview);
     } catch (err) {
       setCandidates(null);
       setSelected(new Set());
@@ -150,7 +189,52 @@ export function GitInstallPanel({
 
   return (
     <div className="git-install-panel">
-      <div className="actions" style={{ marginBottom: "0.7rem" }}>
+      <p className="panel-sub" style={{ marginBottom: "0.6rem" }}>
+        Paste a GitHub shorthand, Git URL, npm package, archive, or a command such as{" "}
+        <code>npx skills add owner/repo</code>. Commands are parsed, never executed.
+      </p>
+      <div className="git-install-fields">
+        <label className="field" style={{ flex: 1, minWidth: 280 }}>
+          <span>Skill source</span>
+          <input
+            value={smartSource}
+            onChange={(event) => {
+              setSmartSource(event.target.value);
+              setDetectedKind(null);
+              setCandidates(null);
+              setSelected(new Set());
+              setPlan(null);
+              setResults(null);
+              setDiffKey(null);
+              setError(null);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && smartSource.trim() && !disabled) void scanSmartSource();
+            }}
+            placeholder="addyosmani/agent-skills or npx skills add owner/repo"
+            disabled={disabled}
+          />
+        </label>
+        <div className="actions" style={{ alignSelf: "end" }}>
+          <button
+            className="primary"
+            type="button"
+            disabled={disabled || !smartSource.trim()}
+            onClick={() => void scanSmartSource()}
+          >
+            {working && !candidates ? "Scanning…" : "Detect & scan"}
+          </button>
+        </div>
+      </div>
+      {detectedKind && (
+        <p className="muted" style={{ margin: "0.55rem 0 0" }}>
+          Detected source: <span className="badge clean">{detectedKind}</span>
+        </p>
+      )}
+
+      <details style={{ marginTop: "0.9rem" }}>
+        <summary>Advanced source options</summary>
+      <div className="actions" style={{ margin: "0.7rem 0" }}>
         <button
           type="button"
           className={sourceTab === "git" ? "primary" : undefined}
@@ -265,6 +349,7 @@ export function GitInstallPanel({
           {working && !candidates ? "Scanning…" : "Scan source"}
         </button>
       </div>
+      </details>
       {error && <p className="form-error">{error}</p>}
 
       {candidates && candidates.length > 0 && (
@@ -276,7 +361,7 @@ export function GitInstallPanel({
                   <th style={{ width: 36 }} />
                   <th>Id</th>
                   <th>Description</th>
-                  <th>Path in repo</th>
+                  <th>Path in source</th>
                 </tr>
               </thead>
               <tbody>

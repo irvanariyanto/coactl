@@ -258,6 +258,13 @@ export interface PackSkillsPreview {
   skills: RemoteSkillCandidate[];
 }
 
+export interface SmartSkillsPreview {
+  kind: "git" | "npm" | "archive";
+  source: string;
+  subpath?: string;
+  skills: RemoteSkillCandidate[];
+}
+
 export interface GitSkillsInstallPlan {
   plan: Array<{
     id: string;
@@ -437,6 +444,15 @@ export const api = {
       | { kind: "archive"; path?: string; url?: string; subpath?: string },
   ) {
     return request<PackSkillsPreview>(`/api/skills/remote/pack/preview${qs(root)}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+  previewSmartSkills(
+    root: string,
+    body: { source: string; branch?: string; registry?: string; subpath?: string },
+  ) {
+    return request<SmartSkillsPreview>(`/api/skills/remote/preview${qs(root)}`, {
       method: "POST",
       body: JSON.stringify(body),
     });

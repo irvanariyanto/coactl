@@ -34,6 +34,7 @@ import {
   planImportSkill,
   planImportWorkflow,
   planInstallRemoteSkills,
+  parseRemoteSkillSource,
   previewSkillsFromArchive,
   previewSkillsFromGit,
   previewSkillsFromNpm,
@@ -592,6 +593,48 @@ app.post("/api/skills/remote/pack/preview", async (c) => {
   } catch (err) {
     const message = (err as Error).message;
     const invalid = /required|provide exactly|must (?:be|use|stay)|not found|not a regular file/i.test(message);
+    return c.json({ error: message }, invalid ? 400 : 502);
+  }
+});
+
+app.post("/api/skills/remote/preview", async (c) => {
+  const body = z
+    .object({
+      source: z.string().min(1),
+      branch: z.string().optional(),
+      registry: z.string().optional(),
+      subpath: z.string().optional(),
+    })
+    .safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: "Skill source is required" }, 400);
+
+  try {
+    const detected = parseRemoteSkillSource(body.data.source);
+    if (detected.kind === "git") {
+      const preview = await previewSkillsFromGit({
+        url: detected.url,
+        branch: body.data.branch,
+        subpath: body.data.subpath,
+      });
+      return c.json({ ...preview, kind: detected.kind, source: detected.source });
+    }
+    if (detected.kind === "npm") {
+      const preview = await previewSkillsFromNpm({
+        install: detected.install,
+        registry: body.data.registry,
+        subpath: body.data.subpath,
+      });
+      return c.json({ ...preview, kind: detected.kind, source: detected.source });
+    }
+    const preview = await previewSkillsFromArchive({
+      path: detected.path,
+      url: detected.url,
+      subpath: body.data.subpath,
+    });
+    return c.json({ ...preview, kind: detected.kind, source: detected.source });
+  } catch (err) {
+    const message = (err as Error).message;
+    const invalid = /required|only the command|only https|must (?:be|use|stay)|package name|provide exactly|not found|not a regular file/i.test(message);
     return c.json({ error: message }, invalid ? 400 : 502);
   }
 });

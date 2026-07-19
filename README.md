@@ -32,6 +32,10 @@ Choose the Pack tab, preview the discovered skills, then use the same overwrite 
 For local archives, use Browse to select the file with the native OS picker or enter its path.
 Legacy CLI `assets/` + `asset.yaml` packs are not mapped; only `SKILL.md` trees are discovered.
 
+The Smart Install field also accepts GitHub shorthand and Skills CLI commands, for example
+`addyosmani/agent-skills` or `npx skills add addyosmani/agent-skills`. Pasted commands are parsed
+only; coactl never executes them.
+
 Safety rules:
 
 - Vendor-managed trees (Cursor `skills-cursor`) are **read-only**: listed and importable-from,
@@ -131,6 +135,7 @@ OS user.
 | POST | `/api/skills/import` | Copy to other tools/scopes (`dryRun: true` previews) |
 | POST | `/api/skills/remote/git/preview` | Shallow-clone URL and list `SKILL.md` candidates |
 | POST | `/api/skills/remote/pack/preview` | Pack/download npm or archive source and list `SKILL.md` candidates |
+| POST | `/api/skills/remote/preview` | Detect GitHub/Git/npm/archive source and preview skills |
 | POST | `/api/skills/remote/git/install` | Write selected remote skills (`dryRun` previews) |
 | GET | `/api/rules?tool=&scope=` | List rules / instruction files |
 | GET/PUT/DELETE | `/api/rules/:tool/:id?scope=&path=` | Read / update / delete rule file |

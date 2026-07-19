@@ -133,6 +133,23 @@ describe("remote pack preview", () => {
   });
 });
 
+describe("smart remote preview", () => {
+  it("requires a source and rejects command arguments", async () => {
+    const missing = await app.request("/api/skills/remote/preview", {
+      method: "POST",
+      body: JSON.stringify({ source: "" }),
+    });
+    expect(missing.status).toBe(400);
+
+    const unsafe = await app.request("/api/skills/remote/preview", {
+      method: "POST",
+      body: JSON.stringify({ source: "npx skills add org/repo && whoami" }),
+    });
+    expect(unsafe.status).toBe(400);
+    expect((await json(unsafe)).error).toContain("npx skills add");
+  });
+});
+
 describe("skills crud", () => {
   it("creates, reads, updates, and deletes a project skill", async () => {
     const root = tempRoot();

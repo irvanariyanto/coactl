@@ -7,6 +7,7 @@ import type {
   ImportResult,
   PackSkillsPreview,
   ScopeMode,
+  SmartSkillsPreview,
   Skill,
   Workspace,
 } from "../api";
@@ -48,6 +49,12 @@ interface Props {
       | { kind: "npm"; install: string; registry?: string; subpath?: string }
       | { kind: "archive"; path?: string; url?: string; subpath?: string },
   ) => Promise<PackSkillsPreview>;
+  onPreviewSmart: (input: {
+    source: string;
+    branch?: string;
+    registry?: string;
+    subpath?: string;
+  }) => Promise<SmartSkillsPreview>;
   onPickArchive: () => Promise<{ path: string } | { cancelled: true }>;
   onPreviewGitInstall: (
     skills: Array<{ id: string; contents: string }>,
@@ -75,6 +82,7 @@ export function SkillsListView({
   onBulkImport,
   onPreviewGitRepo,
   onPreviewPack,
+  onPreviewSmart,
   onPickArchive,
   onPreviewGitInstall,
   onInstallGitSkills,
@@ -245,6 +253,7 @@ export function SkillsListView({
             busy={busy}
             onPreviewRepo={onPreviewGitRepo}
             onPreviewPack={onPreviewPack}
+            onPreviewSmart={onPreviewSmart}
             onPickArchive={onPickArchive}
             onPreviewInstall={onPreviewGitInstall}
             onInstall={async (skills, overwrite) => {
