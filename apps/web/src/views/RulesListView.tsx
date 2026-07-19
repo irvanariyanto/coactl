@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Rule, RuleImportPlan, RuleImportResult, RuleTool, ScopeMode, Workspace } from "../api";
+import { EmptyResourceState } from "../components/EmptyResourceState";
 import { ImportPanel } from "../components/ImportPanel";
 import { PathCandidates } from "../components/PathCandidates";
 import { buildRuleDestinations } from "../import-destinations";
@@ -265,20 +266,36 @@ export function RulesListView({
       )}
 
       {rules.length === 0 ? (
-        <div className="empty">
-          No {singleton ? "instruction file" : "rules"} yet for {toolLabel(tool)} in {mode} scope.
-          <br />
+        <EmptyResourceState
+          title={
+            singleton
+              ? `No ${toolLabel(tool)} instruction file in ${mode} yet`
+              : `No ${toolLabel(tool)} rules in ${mode} yet`
+          }
+          blurb={
+            singleton
+              ? tool === "gemini"
+                ? "Gemini uses a single GEMINI.md instruction file for this scope."
+                : "This tool uses a single AGENTS.md instruction file for this scope (not a rules folder)."
+              : `Each rule is a .${layout?.extension ?? "md"} file in the native rules folder for ${toolLabel(tool)}.`
+          }
+          path={
+            createPath
+              ? formatRuleDestPath(
+                  createPath,
+                  singleton ? singletonId : "<id>",
+                  tool,
+                  layout,
+                )
+              : undefined
+          }
+        >
           {!creating && (
-            <button
-              className="primary"
-              type="button"
-              style={{ marginTop: "0.9rem" }}
-              onClick={() => setCreating(true)}
-            >
+            <button className="primary" type="button" onClick={() => setCreating(true)}>
               {singleton ? "Create instruction file" : "Create your first rule"}
             </button>
           )}
-        </div>
+        </EmptyResourceState>
       ) : visible.length === 0 ? (
         <div className="empty">No rules match “{query.trim()}”.</div>
       ) : (

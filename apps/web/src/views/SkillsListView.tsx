@@ -9,6 +9,7 @@ import type {
   Skill,
   Workspace,
 } from "../api";
+import { EmptyResourceState } from "../components/EmptyResourceState";
 import { GitInstallPanel } from "../components/GitInstallPanel";
 import { ImportPanel } from "../components/ImportPanel";
 import { PathCandidates } from "../components/PathCandidates";
@@ -323,22 +324,26 @@ export function SkillsListView({
       )}
 
       {skills.length === 0 ? (
-        <div className="empty">
-          No skills yet for {toolLabel(tool)} in {mode} scope.
-          <br />
-          <div className="actions" style={{ marginTop: "0.9rem", justifyContent: "center" }}>
-            {!creating && (
-              <button className="primary" type="button" onClick={() => setCreating(true)}>
-                Create your first skill
-              </button>
-            )}
-            {!fromGit && (
-              <button type="button" onClick={() => setFromGit(true)}>
-                Install from Git…
-              </button>
-            )}
-          </div>
-        </div>
+        <EmptyResourceState
+          title={`No ${toolLabel(tool)} skills in ${mode} yet`}
+          blurb="Each skill is a folder with a SKILL.md file. Create one here, or install from a git repo that already has skills."
+          path={
+            createFolder
+              ? `${createFolder}/<id>/SKILL.md`
+              : undefined
+          }
+        >
+          {!creating && (
+            <button className="primary" type="button" onClick={() => setCreating(true)}>
+              Create your first skill
+            </button>
+          )}
+          {!fromGit && (
+            <button type="button" onClick={() => setFromGit(true)}>
+              Install from Git…
+            </button>
+          )}
+        </EmptyResourceState>
       ) : visible.length === 0 ? (
         <div className="empty">No skills match “{query.trim()}”.</div>
       ) : (

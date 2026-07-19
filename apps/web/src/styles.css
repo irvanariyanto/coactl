@@ -1344,6 +1344,52 @@ tbody tr.row-link:hover {
   font-size: 0.9rem;
 }
 
+.empty-resource {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 2.25rem 1.25rem;
+}
+
+.empty-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.98rem;
+  font-weight: 600;
+}
+
+.empty-blurb {
+  margin: 0;
+  max-width: 36rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.empty-path {
+  display: block;
+  max-width: min(100%, 40rem);
+  margin-top: 0.35rem;
+  padding: 0.45rem 0.7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
 /* ---------- Toasts ---------- */
 
 .toasts {

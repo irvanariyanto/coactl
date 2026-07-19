@@ -7,6 +7,7 @@ import type {
   ScopeMode,
   Workspace,
 } from "../api";
+import { EmptyResourceState } from "../components/EmptyResourceState";
 import { ImportPanel } from "../components/ImportPanel";
 import { PathCandidates } from "../components/PathCandidates";
 import { buildCommandDestinations } from "../import-destinations";
@@ -275,20 +276,21 @@ export function CommandsListView({
       )}
 
       {commands.length === 0 ? (
-        <div className="empty">
-          No {label} yet for {toolLabel(tool)} in {mode} scope.
-          <br />
+        <EmptyResourceState
+          title={`No ${toolLabel(tool)} ${label} in ${mode} yet`}
+          blurb={
+            pathKind === "workflow"
+              ? "Antigravity slash workflows are markdown files under the workflows folder (managed here as commands)."
+              : "Each slash command is a markdown file the tool can invoke by id."
+          }
+          path={createPath ? formatCommandDestPath(createPath, "<id>") : undefined}
+        >
           {!creating && (
-            <button
-              className="primary"
-              type="button"
-              style={{ marginTop: "0.9rem" }}
-              onClick={() => setCreating(true)}
-            >
+            <button className="primary" type="button" onClick={() => setCreating(true)}>
               Create your first command
             </button>
           )}
-        </div>
+        </EmptyResourceState>
       ) : visible.length === 0 ? (
         <div className="empty">No {label} match “{query.trim()}”.</div>
       ) : (

@@ -7,6 +7,7 @@ import type {
   WorkflowTool,
   Workspace,
 } from "../api";
+import { EmptyResourceState } from "../components/EmptyResourceState";
 import { ImportPanel } from "../components/ImportPanel";
 import { PathCandidates } from "../components/PathCandidates";
 import { buildWorkflowDestinations } from "../import-destinations";
@@ -265,20 +266,17 @@ export function WorkflowsListView({
       )}
 
       {workflows.length === 0 ? (
-        <div className="empty">
-          No workflows yet for {toolLabel(tool)} in {mode} scope.
-          <br />
+        <EmptyResourceState
+          title={`No ${toolLabel(tool)} workflows in ${mode} yet`}
+          blurb="Claude Code dynamic workflows are JavaScript files with export const meta — not the markdown workflows under Commands."
+          path={createPath ? formatWorkflowDestPath(createPath, "<id>") : undefined}
+        >
           {!creating && (
-            <button
-              className="primary"
-              type="button"
-              style={{ marginTop: "0.9rem" }}
-              onClick={() => setCreating(true)}
-            >
+            <button className="primary" type="button" onClick={() => setCreating(true)}>
               Create your first workflow
             </button>
           )}
-        </div>
+        </EmptyResourceState>
       ) : visible.length === 0 ? (
         <div className="empty">No workflows match “{query.trim()}”.</div>
       ) : (
