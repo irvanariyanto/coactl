@@ -108,14 +108,15 @@ Home
 | Project gate | Block until project root is set; persist root in `localStorage` |
 | Tools | Cards with skill count, resolved path, installed / in-project / path-ok badges |
 | Resources | Skills enabled; other kinds disabled with “Coming soon”; show project + global path candidates |
-| Skills list | Table of skills for selected tool + mode; show folder + per-skill file path; create skill |
+| Skills list | Card grid for selected tool + mode with filter; folder + per-skill path; inline create panel; multi-select with bulk delete and bulk import (preview → apply) |
 | Skill detail | Edit full `SKILL.md`; save/delete; import panel with destinations (tool × scope) and paths |
 
 ### 6.4 Navigation
 
 - Drill-down with breadcrumb (e.g. `Home / Global / Claude Code / Skills / review-pr`)
 - “Change mode” returns to mode home
-- No URL router required for MVP (in-app view state is acceptable)
+- Views are encoded in the URL hash: refresh, back/forward, and deep links restore the screen
+- Unsaved editor changes prompt before in-app navigation or tab close
 
 ### 6.5 UX polish requirements (Phase A — **shipped in 0.2.1**)
 

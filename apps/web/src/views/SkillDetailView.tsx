@@ -1,5 +1,6 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import type { ImportPlan, ImportResult, Skill, Workspace } from "../api";
+import { buildDestinations } from "../import-destinations";
 import { toolLabel, type Mode, type SkillTool } from "../nav";
 
 interface Props {
@@ -402,44 +403,3 @@ function statusTone(status: "written" | "skipped" | "error"): string {
   }
 }
 
-function buildDestinations(
-  sourceTool: SkillTool,
-  sourceMode: Mode,
-  workspace: Workspace,
-  projectRootSet: boolean,
-): Array<{
-  key: string;
-  tool: SkillTool;
-  scope: "global" | "project";
-  installed: boolean;
-  path: string;
-}> {
-  // Hide project destinations until a real project root is set: their paths
-  // would resolve against the server cwd and mislead (A2).
-  const scopes: Array<"global" | "project"> = projectRootSet ? ["global", "project"] : ["global"];
-  const out: Array<{
-    key: string;
-    tool: SkillTool;
-    scope: "global" | "project";
-    installed: boolean;
-    path: string;
-  }> = [];
-  for (const t of workspace.skillTools.filter((x) => x.supportsSkills)) {
-    for (const scope of scopes) {
-      if (t.target === sourceTool && scope === sourceMode) continue;
-      const info =
-        scope === "project"
-          ? workspace.skillPathsByTool[t.target]?.project
-          : workspace.skillPathsByTool[t.target]?.global;
-      out.push({
-        key: `${t.target}:${scope}`,
-        tool: t.target,
-        scope,
-        installed: t.installed,
-        // Imports write to the preferred (always writable) location.
-        path: info?.preferred ?? "",
-      });
-    }
-  }
-  return out;
-}

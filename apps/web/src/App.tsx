@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, type Skill, type Workspace } from "./api";
+import { api, type ImportPlan, type ImportResult, type ScopeMode, type Skill, type SkillTool, type Workspace } from "./api";
 import { modeToScope, parseHash, toolLabel, viewToHash, type Mode, type View } from "./nav";
 import { ModeHomeView } from "./views/ModeHomeView";
 import { ProjectGateView } from "./views/ProjectGateView";
@@ -29,6 +29,7 @@ export function App() {
   });
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [skillsVersion, setSkillsVersion] = useState(0);
   const [draft, setDraft] = useState<Skill | null>(null);
   const [savedContents, setSavedContents] = useState<string | null>(null);
   const [showAllInstalled, setShowAllInstalled] = useState(false);
@@ -144,7 +145,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [view, effectiveRoot, pushToast]);
+  }, [view, effectiveRoot, pushToast, skillsVersion]);
 
   useEffect(() => {
     if (view.screen !== "skill") {
@@ -254,6 +255,86 @@ export function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function handleBulkDelete(rows: Skill[]) {
+    const deletable = rows.filter((r) => !r.readOnly);
+    const skippedReadOnly = rows.length - deletable.length;
+    if (!deletable.length) {
+      pushToast("error", "All selected skills are read-only.");
+      return;
+    }
+    const names = deletable.map((r) => r.id).join(", ");
+    if (!confirm(`Delete ${deletable.length} skill${deletable.length === 1 ? "" : "s"} (${names})? This removes their folders.`)) {
+      return;
+    }
+    setBusy(true);
+    let ok = 0;
+    const errors: string[] = [];
+    for (const r of deletable) {
+      try {
+        await api.deleteSkill(effectiveRoot, r.tool, r.id, r.scope, r.filePath);
+        ok += 1;
+      } catch (err) {
+        errors.push(`${r.id}: ${(err as Error).message}`);
+      }
+    }
+    setBusy(false);
+    setSkillsVersion((v) => v + 1);
+    if (currentMode) void refreshWorkspace(currentMode);
+    if (errors.length) {
+      pushToast("error", `Deleted ${ok}, failed ${errors.length}: ${errors.join("; ")}`);
+    } else {
+      const skipNote = skippedReadOnly ? ` (skipped ${skippedReadOnly} read-only)` : "";
+      pushToast("success", `Deleted ${ok} skill${ok === 1 ? "" : "s"}${skipNote}`);
+    }
+  }
+
+  async function handleBulkPreview(
+    sources: Skill[],
+    targets: Array<{ tool: SkillTool; scope: ScopeMode }>,
+    overwrite: boolean,
+  ): Promise<ImportPlan["plan"]> {
+    const plan: ImportPlan["plan"] = [];
+    for (const s of sources) {
+      const res = await api.previewImport(effectiveRoot, {
+        source: { tool: s.tool, scope: s.scope, id: s.id },
+        targets,
+        overwrite,
+      });
+      plan.push(...res.plan);
+    }
+    return plan;
+  }
+
+  async function handleBulkImport(
+    sources: Skill[],
+    targets: Array<{ tool: SkillTool; scope: ScopeMode }>,
+    overwrite: boolean,
+  ): Promise<ImportResult["results"]> {
+    setBusy(true);
+    const results: ImportResult["results"] = [];
+    try {
+      for (const s of sources) {
+        const res = await api.importSkill(effectiveRoot, {
+          source: { tool: s.tool, scope: s.scope, id: s.id },
+          targets,
+          overwrite,
+        });
+        results.push(...res.results);
+      }
+    } finally {
+      setBusy(false);
+    }
+    const written = results.filter((r) => r.status === "written").length;
+    const skipped = results.filter((r) => r.status === "skipped").length;
+    const failed = results.filter((r) => r.status === "error").length;
+    pushToast(
+      failed ? "error" : "success",
+      `Import finished: ${written} written, ${skipped} skipped${failed ? `, ${failed} failed` : ""}`,
+    );
+    if (currentMode) void refreshWorkspace(currentMode);
+    return results;
   }
 
   const crumbs: Array<{ label: string; onClick?: () => void }> = [];
@@ -400,7 +481,11 @@ export function App() {
             tool={view.tool}
             skills={skills}
             workspace={workspace}
+            projectRootSet={projectRootSet}
             busy={busy}
+            onBulkDelete={handleBulkDelete}
+            onBulkPreview={handleBulkPreview}
+            onBulkImport={handleBulkImport}
             onOpen={(skill) =>
               navigate({
                 screen: "skill",
