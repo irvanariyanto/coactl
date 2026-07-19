@@ -1,6 +1,6 @@
 # coactl — Product Requirements Document (PRD)
 
-**Version:** 0.2.1 (as-built, Phase A–B shipped; Phase C #2 shipped)  
+**Version:** 0.3.0 (Phases A–C + UX polish shipped)  
 **Status:** Living document — as-built product plus agreed next priorities  
 **Last updated:** 2026-07-19  
 **Related:** [README.md](../README.md) · Legacy CLI frozen at tag `cli-v0.1.0` / branch `archive/cli-v0.1`
@@ -43,10 +43,9 @@ Developers use multiple AI coding assistants (Claude Code, Cursor, Codex, Gemini
 ### Non-goals (current release / near-term)
 
 - Central registry / `.coactl` canonical store
-- Full multi-kind parity (rules, commands, workflows) before skills polish is done
-- npm/url remote packs from the legacy CLI (git URL install is available)
-- Multi-user SaaS / remote hosting
-- Editing Commands / Workflows / AGENTS.md aggregates until later Phase B work (Rules MVP is in)
+- npm/zip remote packs from the legacy CLI (public git URL install is available)
+- Multi-user SaaS / cloud accounts
+- Private git auth for remote skill install
 
 ---
 
@@ -371,7 +370,7 @@ Acceptance checks (manual):
 
 ## 12. Roadmap
 
-### Phase A — Skills polish — **✅ shipped in 0.2.1**
+### Phase A — Skills polish — **✅ shipped in 0.2.1** (bundled in 0.3.0)
 
 Delivered in priority order:
 
@@ -387,18 +386,20 @@ full-width editor with ⌘S save, import preview table).
 
 Exit criteria met: skills feel trustworthy for daily Global ↔ Project / cross-tool use.
 
-### Phase B — More resource kinds
+### Phase B — More resource kinds — **✅ shipped in 0.3.0**
 
 1. **Rules** — **shipped** for all skill tools (multi-file + AGENTS/GEMINI)  
 2. **Commands** — **shipped** for Claude / Cursor / OpenCode / Antigravity  
 3. **Workflows** — **shipped** for Claude Code (`.claude/workflows/*.js`); Antigravity under Commands  
 
-### Phase C — Nice-to-have
+### Phase C — Nice-to-have — **✅ shipped in 0.3.0**
 
 1. Deep links / router — **shipped** (URL hash; Resources hub for rule-capable tools)  
 2. Richer diff UI for import overwrite — **shipped** (preview summary counts; unified + side-by-side View diff; identical badge)  
 3. Remote git skill sources — **shipped** (scan repo for `SKILL.md`, install into native tool dirs; no `.coactl` registry)  
 4. Optional login for remote/VPS — **shipped** (scrypt hash in `~/.coactl/auth.json`; session cookie; enable from Mode home)
+
+Also in 0.3.0: kind switcher + last-visited nav, empty-state path copy, list hotkeys, draft autosave, undo delete, import defaults + open written target.
 
 Legacy CLI capabilities (lockfile, drift sync from `.coactl`) remain archived unless explicitly revived under native-first constraints.
 

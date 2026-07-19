@@ -1,6 +1,6 @@
 # coactl (web)
 
-**Related:** [docs/PRD.md](docs/PRD.md) · Legacy CLI frozen at tag `cli-v0.1.0` / branch `archive/cli-v0.1`
+**Version:** 0.3.0 · **Related:** [docs/PRD.md](docs/PRD.md) · Legacy CLI frozen at tag `cli-v0.1.0` / branch `archive/cli-v0.1`
 
 Local web app that manages **native AI coding skills and rules** with a clear **Global vs Project** flow.
 
@@ -155,6 +155,14 @@ apps/web/          Vite + React UI (drill-down)
 apps/server/       Hono API (default 127.0.0.1; `COACTL_HOST` to bind elsewhere)
 packages/domain/   detection, skill/rule IO, import
 ```
+
+## Releases
+
+### 0.3.0
+
+Phases A–C complete: Skills/Rules/Commands/Workflows, import overwrite diffs, git skill install,
+optional VPS login (`~/.coactl/auth.json`), kind switcher, empty-state paths, list hotkeys,
+draft recovery, and undo delete.
 
 ## License
 
