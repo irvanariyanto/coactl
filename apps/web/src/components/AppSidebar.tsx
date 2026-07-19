@@ -222,6 +222,13 @@ export function AppSidebar({
             />
           </SidebarSection>
         </nav>
+
+        <footer className="sidebar-footer" aria-label={`coactl version ${__APP_VERSION__}`}>
+          <span className="sidebar-footer-mark" aria-hidden="true">c</span>
+          <span className="sidebar-footer-product">coactl</span>
+          <span className="sidebar-footer-line" aria-hidden="true" />
+          <span className="sidebar-footer-version">v{__APP_VERSION__}</span>
+        </footer>
       </aside>
     </>
   );

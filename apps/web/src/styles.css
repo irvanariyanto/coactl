@@ -389,6 +389,49 @@ textarea:read-only {
   gap: 1.1rem;
 }
 
+.sidebar-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1rem 0.35rem 0;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sidebar-footer-mark {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-1));
+  color: var(--accent-strong);
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: lowercase;
+}
+
+.sidebar-footer-product {
+  color: var(--text-muted);
+  font-weight: 700;
+  letter-spacing: 0.11em;
+}
+
+.sidebar-footer-line {
+  height: 1px;
+  flex: 1;
+  background: linear-gradient(90deg, var(--border-strong), transparent);
+}
+
+.sidebar-footer-version {
+  font-variant-numeric: tabular-nums;
+}
+
 .sidebar-section {
   display: flex;
   flex-direction: column;
