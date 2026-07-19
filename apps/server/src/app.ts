@@ -52,6 +52,22 @@ import {
   type WorkflowTool,
 } from "@coactl/domain";
 import { z } from "zod";
+import {
+  assertLoginAllowed,
+  authFilePath,
+  changePassword,
+  clearLoginFailures,
+  clearSessionCookie,
+  disableAuth,
+  enableAuth,
+  getAuthStatus,
+  isPublicAuthPath,
+  loadAuthFile,
+  readSession,
+  recordLoginFailure,
+  setSessionCookie,
+  verifyPassword,
+} from "./auth.js";
 
 type Variables = {
   projectRoot: string;
@@ -63,10 +79,18 @@ app.use(
   "*",
   cors({
     origin: ["http://127.0.0.1:5173", "http://localhost:5173"],
+    credentials: true,
   }),
 );
 
 app.use("/api/*", async (c, next) => {
+  const pathname = new URL(c.req.url).pathname;
+  const file = loadAuthFile();
+  const enabled = Boolean(file?.enabled && file.hash && file.salt && file.sessionSecret);
+  if (enabled && !isPublicAuthPath(pathname, c.req.method) && !readSession(c, file)) {
+    return c.json({ error: "Unlock required", code: "AUTH_REQUIRED" }, 401);
+  }
+
   const rootParam = c.req.query("root") ?? process.env.COACTL_ROOT;
   c.set("projectRoot", resolve(rootParam || process.cwd()));
   await next();
@@ -75,6 +99,111 @@ app.use("/api/*", async (c, next) => {
 app.get("/api/health", (c) =>
   c.json({ ok: true, version: "0.2.1", focus: "skills+rules+commands+workflows" }),
 );
+
+app.get("/api/auth/status", (c) => c.json(getAuthStatus(c)));
+
+app.post("/api/auth/login", async (c) => {
+  const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || "local";
+  try {
+    assertLoginAllowed(ip);
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 429);
+  }
+  const body = z.object({ password: z.string().min(1) }).safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: "Password required" }, 400);
+  const file = loadAuthFile();
+  if (!file?.enabled) return c.json({ error: "Login is not enabled" }, 400);
+  if (!verifyPassword(body.data.password, file)) {
+    recordLoginFailure(ip);
+    return c.json({ error: "Incorrect password" }, 401);
+  }
+  clearLoginFailures(ip);
+  setSessionCookie(c, file);
+  return c.json({
+    ok: true,
+    enabled: true,
+    unlocked: true,
+    authFilePath: authFilePath(),
+  });
+});
+
+app.post("/api/auth/logout", (c) => {
+  clearSessionCookie(c);
+  const file = loadAuthFile();
+  const enabled = Boolean(file?.enabled && file.hash && file.salt && file.sessionSecret);
+  return c.json({
+    ok: true,
+    enabled,
+    unlocked: !enabled,
+    authFilePath: authFilePath(),
+  });
+});
+
+app.post("/api/auth/enable", async (c) => {
+  const body = z
+    .object({ password: z.string().min(8), confirm: z.string().min(8) })
+    .safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: "Password must be at least 8 characters" }, 400);
+  if (body.data.password !== body.data.confirm) {
+    return c.json({ error: "Passwords do not match" }, 400);
+  }
+  try {
+    const file = enableAuth(body.data.password);
+    setSessionCookie(c, file);
+    return c.json({
+      ok: true,
+      enabled: true,
+      unlocked: true,
+      authFilePath: authFilePath(),
+    });
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 400);
+  }
+});
+
+app.post("/api/auth/disable", async (c) => {
+  const body = z.object({ password: z.string().min(1) }).safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: "Password required" }, 400);
+  const file = loadAuthFile();
+  if (!file?.enabled) return c.json({ error: "Login is not enabled" }, 400);
+  if (!verifyPassword(body.data.password, file)) {
+    return c.json({ error: "Incorrect password" }, 401);
+  }
+  disableAuth();
+  clearSessionCookie(c);
+  return c.json({
+    ok: true,
+    enabled: false,
+    unlocked: true,
+    authFilePath: authFilePath(),
+  });
+});
+
+app.post("/api/auth/password", async (c) => {
+  const body = z
+    .object({
+      current: z.string().min(1),
+      password: z.string().min(8),
+      confirm: z.string().min(8),
+    })
+    .safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: "Invalid password change request" }, 400);
+  if (body.data.password !== body.data.confirm) {
+    return c.json({ error: "Passwords do not match" }, 400);
+  }
+  try {
+    const file = changePassword(body.data.current, body.data.password);
+    setSessionCookie(c, file);
+    return c.json({
+      ok: true,
+      enabled: true,
+      unlocked: true,
+      authFilePath: authFilePath(),
+    });
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 400);
+  }
+});
 
 app.get("/api/workspace", (c) => {
   const projectRoot = c.get("projectRoot");
@@ -993,7 +1122,7 @@ app.post("/api/pick-folder", async (c) => {
     // macOS osascript: User canceled. (-128)
     if (/User canceled|User cancelled|-128/i.test(msg)) return true;
     // zenity: exit code 1 on Cancel
-    if (platform === "linux" && err && "code" in err && (err as NodeJS.ErrnoException).code === 1) {
+    if (platform === "linux" && err && "code" in err && Number((err as { code?: string | number }).code) === 1) {
       return true;
     }
     return false;

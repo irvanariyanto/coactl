@@ -1,11 +1,21 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { app } from "./app.js";
 
 const temps: string[] = [];
 const fixtureRoot = join(dirname(fileURLToPath(import.meta.url)), "..", ".test-tmp");
+
+/** Keep tests away from the developer's real ~/.coactl/auth.json */
+beforeAll(() => {
+  mkdirSync(fixtureRoot, { recursive: true });
+  process.env.COACTL_AUTH_FILE = join(fixtureRoot, "auth-disabled.json");
+  writeFileSync(
+    process.env.COACTL_AUTH_FILE,
+    JSON.stringify({ version: 1, enabled: false, salt: "", hash: "", sessionSecret: "" }),
+  );
+});
 
 afterEach(() => {
   for (const dir of temps.splice(0)) {
@@ -18,6 +28,16 @@ function tempRoot(): string {
   const dir = mkdtempSync(join(fixtureRoot, "coactl-"));
   temps.push(dir);
   return dir;
+}
+
+function cookieHeader(res: Response): string {
+  const anyRes = res as Response & { headers: Headers & { getSetCookie?: () => string[] } };
+  const many = anyRes.headers.getSetCookie?.() ?? [];
+  if (many.length) {
+    return many.map((c) => c.split(";")[0]!).join("; ");
+  }
+  const single = res.headers.get("set-cookie");
+  return single ? single.split(";")[0]! : "";
 }
 
 function writeSkillFile(dir: string, id: string, description: string): string {
@@ -476,5 +496,63 @@ describe("workflows crud", () => {
     expect(created.workflow.filePath).toContain(join(".claude", "workflows", "audit-routes.js"));
     expect(created.workflow.contents).toContain("export const meta");
     expect(created.workflow.extension).toBe("js");
+  });
+});
+
+describe("optional login", () => {
+  beforeEach(() => {
+    const dir = tempRoot();
+    process.env.COACTL_AUTH_FILE = join(dir, "auth.json");
+  });
+
+  it("gates api until unlocked and stores a scrypt hash on disk", async () => {
+    const root = tempRoot();
+    const enable = await app.request("/api/auth/enable", {
+      method: "POST",
+      body: JSON.stringify({ password: "correct-horse", confirm: "correct-horse" }),
+    });
+    expect(enable.status).toBe(200);
+    const enabledBody = await json(enable);
+    expect(enabledBody.enabled).toBe(true);
+    expect(enabledBody.unlocked).toBe(true);
+
+    const stored = JSON.parse(readFileSync(process.env.COACTL_AUTH_FILE!, "utf8"));
+    expect(stored.enabled).toBe(true);
+    expect(stored.hash).toMatch(/^[0-9a-f]+$/);
+    expect(stored.hash).not.toContain("correct-horse");
+    expect(stored.salt).toMatch(/^[0-9a-f]+$/);
+
+    const locked = await app.request(`/api/workspace?root=${root}&mode=project`);
+    expect(locked.status).toBe(401);
+
+    const bad = await app.request("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ password: "wrong-password" }),
+    });
+    expect(bad.status).toBe(401);
+
+    const login = await app.request("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ password: "correct-horse" }),
+    });
+    expect(login.status).toBe(200);
+    const cookie = cookieHeader(login);
+    expect(cookie).toContain("coactl_session=");
+
+    const ok = await app.request(`/api/workspace?root=${root}&mode=project`, {
+      headers: { Cookie: cookie },
+    });
+    expect(ok.status).toBe(200);
+
+    const disable = await app.request("/api/auth/disable", {
+      method: "POST",
+      headers: { Cookie: cookie },
+      body: JSON.stringify({ password: "correct-horse" }),
+    });
+    expect(disable.status).toBe(200);
+    expect((await json(disable)).enabled).toBe(false);
+
+    const open = await app.request(`/api/workspace?root=${root}&mode=project`);
+    expect(open.status).toBe(200);
   });
 });

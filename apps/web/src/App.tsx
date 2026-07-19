@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   api,
+  ApiError,
+  type AuthStatus,
   type Command,
   type CommandImportPlan,
   type CommandImportResult,
@@ -51,6 +53,7 @@ import { RulesListView } from "./views/RulesListView";
 import { SkillDetailView } from "./views/SkillDetailView";
 import { SkillsListView } from "./views/SkillsListView";
 import { ToolsView } from "./views/ToolsView";
+import { UnlockView } from "./views/UnlockView";
 import { WorkflowDetailView } from "./views/WorkflowDetailView";
 import { WorkflowsListView } from "./views/WorkflowsListView";
 
@@ -94,6 +97,7 @@ export function App() {
   const [showAllInstalled, setShowAllInstalled] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [busy, setBusy] = useState(false);
+  const [auth, setAuth] = useState<AuthStatus | null>(null);
   const toastId = useRef(0);
 
   const effectiveRoot = root.trim() || ".";
@@ -165,6 +169,7 @@ export function App() {
 
   const currentMode: Mode | null =
     view.screen === "mode" || view.screen === "project-gate" ? null : view.mode;
+  const authLocked = Boolean(auth?.enabled && !auth.unlocked);
 
   const pushToast = useCallback((kind: Toast["kind"], text: string) => {
     const id = ++toastId.current;
@@ -176,30 +181,59 @@ export function App() {
 
   const dismissToast = (id: number) => setToasts((prev) => prev.filter((t) => t.id !== id));
 
+  const handleApiError = useCallback(
+    (err: unknown) => {
+      if (err instanceof ApiError && (err.status === 401 || err.code === "AUTH_REQUIRED")) {
+        setAuth((prev) =>
+          prev ? { ...prev, enabled: true, unlocked: false } : { enabled: true, unlocked: false, authFilePath: "" },
+        );
+        return;
+      }
+      pushToast("error", (err as Error).message);
+    },
+    [pushToast],
+  );
+
   const refreshWorkspace = useCallback(
     async (mode: Mode) => {
       setBusy(true);
       try {
         setWorkspace(await api.workspace(effectiveRoot, mode));
       } catch (err) {
-        pushToast("error", (err as Error).message);
+        handleApiError(err);
       } finally {
         setBusy(false);
       }
     },
-    [effectiveRoot, pushToast],
+    [effectiveRoot, handleApiError],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .authStatus()
+      .then((status) => {
+        if (!cancelled) setAuth(status);
+      })
+      .catch((err) => {
+        if (!cancelled) pushToast("error", (err as Error).message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pushToast]);
 
   useEffect(() => {
     localStorage.setItem("coactl.root", root.trim());
   }, [root]);
 
   useEffect(() => {
-    if (!currentMode) return;
+    if (authLocked || !currentMode) return;
     void refreshWorkspace(currentMode);
-  }, [currentMode, refreshWorkspace]);
+  }, [authLocked, currentMode, refreshWorkspace]);
 
   useEffect(() => {
+    if (authLocked) return;
     if (view.screen !== "skills" && view.screen !== "skill") return;
     const scope = modeToScope(view.mode);
     let cancelled = false;
@@ -218,9 +252,10 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [view, effectiveRoot, pushToast, skillsVersion]);
+  }, [authLocked, view, effectiveRoot, pushToast, skillsVersion]);
 
   useEffect(() => {
+    if (authLocked) return;
     if (view.screen !== "rules" && view.screen !== "rule") return;
     const scope = modeToScope(view.mode);
     let cancelled = false;
@@ -239,9 +274,10 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [view, effectiveRoot, pushToast, rulesVersion]);
+  }, [authLocked, view, effectiveRoot, pushToast, rulesVersion]);
 
   useEffect(() => {
+    if (authLocked) return;
     if (view.screen !== "commands" && view.screen !== "command") return;
     const scope = modeToScope(view.mode);
     let cancelled = false;
@@ -260,9 +296,10 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [view, effectiveRoot, pushToast, commandsVersion]);
+  }, [authLocked, view, effectiveRoot, pushToast, commandsVersion]);
 
   useEffect(() => {
+    if (authLocked) return;
     if (view.screen !== "workflows" && view.screen !== "workflow") return;
     const scope = modeToScope(view.mode);
     let cancelled = false;
@@ -281,9 +318,10 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [view, effectiveRoot, pushToast, workflowsVersion]);
+  }, [authLocked, view, effectiveRoot, pushToast, workflowsVersion]);
 
   useEffect(() => {
+    if (authLocked) return;
     if (view.screen !== "skill") {
       setDraft(null);
       if (view.screen !== "rule" && view.screen !== "command" && view.screen !== "workflow") {
@@ -311,9 +349,10 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [view, effectiveRoot, pushToast]);
+  }, [authLocked, view, effectiveRoot, pushToast]);
 
   useEffect(() => {
+    if (authLocked) return;
     if (view.screen !== "rule") {
       setRuleDraft(null);
       return;
@@ -338,9 +377,10 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [view, effectiveRoot, pushToast]);
+  }, [authLocked, view, effectiveRoot, pushToast]);
 
   useEffect(() => {
+    if (authLocked) return;
     if (view.screen !== "command") {
       setCommandDraft(null);
       return;
@@ -365,9 +405,10 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [view, effectiveRoot, pushToast]);
+  }, [authLocked, view, effectiveRoot, pushToast]);
 
   useEffect(() => {
+    if (authLocked) return;
     if (view.screen !== "workflow") {
       setWorkflowDraft(null);
       return;
@@ -392,7 +433,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [view, effectiveRoot, pushToast]);
+  }, [authLocked, view, effectiveRoot, pushToast]);
 
   function rememberRoot(path: string) {
     const trimmed = path.trim();
@@ -1145,6 +1186,28 @@ export function App() {
       view.screen === "command" ||
       view.screen === "workflow");
 
+  if (!auth) {
+    return (
+      <div className="app">
+        <header className="topbar">
+          <div className="brand">
+            <span className="logo">c</span>
+            <span>
+              coa<em>ctl</em>
+            </span>
+          </div>
+        </header>
+        <main className="content">
+          <p className="muted">Checking login status…</p>
+        </main>
+      </div>
+    );
+  }
+
+  if (auth.enabled && !auth.unlocked) {
+    return <UnlockView onUnlocked={setAuth} />;
+  }
+
   return (
     <div className="app">
       <header className="topbar">
@@ -1224,6 +1287,21 @@ export function App() {
             Refresh
           </button>
         )}
+
+        {auth.enabled && (
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => {
+              void api
+                .logout()
+                .then((status) => setAuth(status))
+                .catch((err) => pushToast("error", (err as Error).message));
+            }}
+          >
+            Lock
+          </button>
+        )}
       </header>
 
       <main className="content">
@@ -1253,7 +1331,14 @@ export function App() {
           />
         )}
 
-        {view.screen === "mode" && <ModeHomeView onSelect={goMode} />}
+        {view.screen === "mode" && (
+          <ModeHomeView
+            onSelect={goMode}
+            auth={auth}
+            onAuthChange={setAuth}
+            onToast={pushToast}
+          />
+        )}
 
         {view.screen === "project-gate" && (
           <ProjectGateView

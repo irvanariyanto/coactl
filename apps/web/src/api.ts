@@ -230,6 +230,22 @@ export interface WorkflowImportPlan {
   }>;
 }
 
+export interface AuthStatus {
+  enabled: boolean;
+  unlocked: boolean;
+  authFilePath: string;
+}
+
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+  constructor(status: number, message: string, code?: string) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
 function qs(root: string, extra?: Record<string, string>): string {
   const params = new URLSearchParams({ root, ...extra });
   return `?${params.toString()}`;
@@ -237,20 +253,58 @@ function qs(root: string, extra?: Record<string, string>): string {
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
+    credentials: "include",
     ...init,
     headers: {
       "Content-Type": "application/json",
       ...(init?.headers ?? {}),
     },
   });
-  const data = await res.json();
+  const data = (await res.json().catch(() => ({}))) as {
+    error?: string;
+    code?: string;
+  };
   if (!res.ok) {
-    throw new Error((data as { error?: string }).error ?? `Request failed (${res.status})`);
+    throw new ApiError(
+      res.status,
+      data.error ?? `Request failed (${res.status})`,
+      data.code,
+    );
   }
   return data as T;
 }
 
 export const api = {
+  authStatus() {
+    return request<AuthStatus>("/api/auth/status");
+  },
+  login(password: string) {
+    return request<AuthStatus & { ok: boolean }>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    });
+  },
+  logout() {
+    return request<AuthStatus & { ok: boolean }>("/api/auth/logout", { method: "POST" });
+  },
+  enableAuth(password: string, confirm: string) {
+    return request<AuthStatus & { ok: boolean }>("/api/auth/enable", {
+      method: "POST",
+      body: JSON.stringify({ password, confirm }),
+    });
+  },
+  disableAuth(password: string) {
+    return request<AuthStatus & { ok: boolean }>("/api/auth/disable", {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    });
+  },
+  changeAuthPassword(current: string, password: string, confirm: string) {
+    return request<AuthStatus & { ok: boolean }>("/api/auth/password", {
+      method: "POST",
+      body: JSON.stringify({ current, password, confirm }),
+    });
+  },
   workspace(root: string, mode: Mode) {
     return request<Workspace>(`/api/workspace${qs(root, { mode })}`);
   },

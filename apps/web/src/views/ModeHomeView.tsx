@@ -1,10 +1,15 @@
+import type { AuthStatus } from "../api";
 import type { Mode } from "../nav";
+import { AuthSettingsPanel } from "./AuthSettingsPanel";
 
 interface Props {
   onSelect: (mode: Mode) => void;
+  auth: AuthStatus;
+  onAuthChange: (status: AuthStatus) => void;
+  onToast: (kind: "success" | "error", text: string) => void;
 }
 
-export function ModeHomeView({ onSelect }: Props) {
+export function ModeHomeView({ onSelect, auth, onAuthChange, onToast }: Props) {
   return (
     <>
       <div className="hero">
@@ -40,6 +45,7 @@ export function ModeHomeView({ onSelect }: Props) {
           <span className="go">Choose a project →</span>
         </button>
       </div>
+      <AuthSettingsPanel auth={auth} onAuthChange={onAuthChange} onToast={onToast} />
     </>
   );
 }

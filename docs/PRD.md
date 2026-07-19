@@ -37,7 +37,7 @@ Developers use multiple AI coding assistants (Claude Code, Cursor, Codex, Gemini
 3. **Show resolved filesystem paths** so users always know where resources live.
 4. Support **CRUD** for skills in each tool’s native folder (`…/skills/<id>/SKILL.md`).
 5. Support **import/copy** across tools and across scopes without reformatting file contents.
-6. Stay **local and private**: bind to localhost; no cloud account required.
+6. Stay **local and private** by default (localhost bind; no cloud account). Optional single-password unlock for VPS deploy — hash stored in `~/.coactl/auth.json`, not `.env`.
 7. Make import **trustworthy** (preview before overwrite; clear duplicate handling).
 
 ### Non-goals (current release / near-term)
@@ -397,7 +397,8 @@ Exit criteria met: skills feel trustworthy for daily Global ↔ Project / cross-
 
 1. Deep links / router — **shipped** (URL hash; Resources hub for rule-capable tools)  
 2. Richer diff UI for import overwrite — **shipped** (preview summary counts; unified + side-by-side View diff; identical badge)  
-3. Optional revival of legacy remote sources **only** if they still write native dirs (no `.coactl` registry)
+3. Optional revival of legacy remote sources **only** if they still write native dirs (no `.coactl` registry)  
+4. Optional login for remote/VPS — **shipped** (scrypt hash in `~/.coactl/auth.json`; session cookie; enable from Mode home)
 
 Legacy CLI capabilities (lockfile, drift sync from `.coactl`) remain archived unless explicitly revived under native-first constraints.
 

@@ -1,0 +1,62 @@
+import { useState, type FormEvent } from "react";
+import { api, type AuthStatus } from "../api";
+
+interface Props {
+  onUnlocked: (status: AuthStatus) => void;
+}
+
+export function UnlockView({ onUnlocked }: Props) {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const status = await api.login(password);
+      onUnlocked(status);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="app unlock-app">
+      <header className="topbar">
+        <div className="brand">
+          <span className="logo">c</span>
+          <span>
+            coa<em>ctl</em>
+          </span>
+        </div>
+      </header>
+      <main className="content unlock-content">
+        <form className="unlock-card" onSubmit={(e) => void submit(e)}>
+          <h1>Unlock coactl</h1>
+          <p className="panel-sub">
+            Login is enabled on this instance. Enter the password to manage skills and rules.
+          </p>
+          <label className="field">
+            <span>Password</span>
+            <input
+              type="password"
+              autoFocus
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={busy}
+            />
+          </label>
+          {error && <p className="form-error">{error}</p>}
+          <button className="primary" type="submit" disabled={busy || !password}>
+            Unlock
+          </button>
+        </form>
+      </main>
+    </div>
+  );
+}

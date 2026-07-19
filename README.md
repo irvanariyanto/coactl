@@ -40,6 +40,22 @@ npm run dev   # builds domain, starts API + web, opens http://127.0.0.1:5173
 Or run the pieces separately: `npm run dev:server` (API on `http://127.0.0.1:8787`) and
 `npm run dev:web` (UI on `http://127.0.0.1:5173`).
 
+### Optional login (VPS / remote)
+
+Login is **off** by default. On the home screen, enable it and set a password — coactl writes a
+one-way **scrypt hash** to `~/.coactl/auth.json` (mode `600`). No `.env` password.
+
+When enabled, the UI shows an Unlock screen and all `/api/*` routes (except health / auth) require
+a session cookie.
+
+For a VPS, enable login first, then bind beyond localhost:
+
+```bash
+COACTL_HOST=0.0.0.0 COACTL_PORT=8787 npm run start -w @coactl/server
+```
+
+Prefer HTTPS via a reverse proxy. Put the process behind a locked-down OS user.
+
 ## Native skill paths
 
 | Tool | Project | Global (resolved from disk / env) |
@@ -105,6 +121,12 @@ Or run the pieces separately: `npm run dev:server` (API on `http://127.0.0.1:878
 | POST | `/api/workflows/scaffold` | Scaffold (+ save) |
 | POST | `/api/workflows/import` | Copy across scopes (`dryRun` previews) |
 | POST | `/api/pick-folder` | Native OS folder picker for project root |
+| GET | `/api/auth/status` | Whether login is enabled / session unlocked |
+| POST | `/api/auth/enable` | Enable login + store password hash |
+| POST | `/api/auth/login` | Unlock (sets httpOnly session cookie) |
+| POST | `/api/auth/logout` | Clear session |
+| POST | `/api/auth/disable` | Disable login (password required) |
+| POST | `/api/auth/password` | Change password |
 
 Writes into read-only vendor dirs are rejected with `403`.
 
@@ -125,7 +147,7 @@ Import body (skills or rules):
 
 ```
 apps/web/          Vite + React UI (drill-down)
-apps/server/       Hono API (127.0.0.1 only)
+apps/server/       Hono API (default 127.0.0.1; `COACTL_HOST` to bind elsewhere)
 packages/domain/   detection, skill/rule IO, import
 ```
 
