@@ -73,8 +73,12 @@ run("api", "npm", ["run", "dev", "-w", "@coactl/server"]);
 run("web", "npm", ["run", "dev", "-w", "@coactl/web"]);
 
 if (await waitFor(WEB_URL)) {
-  console.log(`Opening ${WEB_URL}`);
-  openBrowser(WEB_URL);
+  if (process.env.COACTL_OPEN_BROWSER !== "0") {
+    console.log(`Opening ${WEB_URL}`);
+    openBrowser(WEB_URL);
+  } else {
+    console.log(`coactl is ready at ${WEB_URL}`);
+  }
 } else {
   console.log(`Web server did not come up; open ${WEB_URL} manually once it does.`);
 }
