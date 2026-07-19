@@ -1,6 +1,6 @@
 # coactl — Product Requirements Document (PRD)
 
-**Version:** 0.4.2 (guided installation and update availability)
+**Version:** 0.4.3 (always-visible version and update status)
 
 **Status:** Living document — as-built product plus agreed next priorities  
 **Last updated:** 2026-07-19  
