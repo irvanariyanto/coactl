@@ -32,6 +32,10 @@ Choose the Pack tab, preview the discovered skills, then use the same overwrite 
 For local archives, use Browse to select the file with the native OS picker or enter its path.
 Legacy CLI `assets/` + `asset.yaml` packs are not mapped; only `SKILL.md` trees are discovered.
 
+Remote installs preserve the complete native skill directory, including sibling `scripts/`,
+`references/`, templates, and binary assets. Symlinks and special files are rejected; each skill
+is limited to 1,000 files and 20 MiB, and overwrite replaces the directory as one atomic unit.
+
 The Smart Install field also accepts GitHub shorthand and Skills CLI commands, for example
 `addyosmani/agent-skills` or `npx skills add addyosmani/agent-skills`. Pasted commands are parsed
 only; coactl never executes them.

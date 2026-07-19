@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -66,6 +66,23 @@ describe("scanSkillsInDirectory", () => {
     const found = scanSkillsInDirectory(root, "packs/frontend");
     expect(found.map((s) => s.id)).toEqual(["ui-review"]);
   });
+
+  it("includes nested supporting files and rejects symlinks", () => {
+    const root = tempDir();
+    writeSkill(root, "skills", "complete", "Complete skill");
+    const skillDir = join(root, "skills", "complete");
+    mkdirSync(join(skillDir, "references"));
+    writeFileSync(join(skillDir, "references", "guide.md"), "Guide");
+
+    const found = scanSkillsInDirectory(root);
+    expect(found[0]!.files.map((file) => file.path)).toEqual([
+      "references/guide.md",
+      "SKILL.md",
+    ]);
+
+    symlinkSync(join(skillDir, "references", "guide.md"), join(skillDir, "linked-guide.md"));
+    expect(() => scanSkillsInDirectory(root)).toThrow("symbolic link");
+  });
 });
 
 describe("previewSkillsFromGit", () => {
@@ -128,5 +145,86 @@ describe("installRemoteSkills", () => {
       overwrite: false,
     });
     expect(again.results[0]!.status).toBe("skipped");
+  });
+
+  it("installs a complete tree and atomically replaces stale supporting files", () => {
+    const project = tempDir();
+    const contents = "---\nname: demo\ndescription: Demo\n---\n\nBody\n";
+    const files = [
+      {
+        path: "SKILL.md",
+        contentsBase64: Buffer.from(contents).toString("base64"),
+        size: Buffer.byteLength(contents),
+      },
+      {
+        path: "references/guide.md",
+        contentsBase64: Buffer.from("First guide").toString("base64"),
+        size: Buffer.byteLength("First guide"),
+      },
+    ];
+    const first = installRemoteSkills({
+      projectRoot: project,
+      tool: "claude-code",
+      scope: "project",
+      skills: [{ id: "demo", contents, files }],
+    });
+    const skillDir = join(first.results[0]!.filePath!, "..");
+    expect(readFileSync(join(skillDir, "references", "guide.md"), "utf-8")).toBe("First guide");
+    writeFileSync(join(skillDir, "stale.txt"), "remove me");
+
+    const replacement = [
+      files[0]!,
+      {
+        path: "scripts/check.sh",
+        contentsBase64: Buffer.from("#!/bin/sh\n").toString("base64"),
+        size: Buffer.byteLength("#!/bin/sh\n"),
+        mode: 0o755,
+      },
+    ];
+    const plan = planInstallRemoteSkills({
+      projectRoot: project,
+      tool: "claude-code",
+      scope: "project",
+      overwrite: true,
+      skills: [{ id: "demo", contents, files: replacement }],
+    }).plan[0]!;
+    expect(plan.removedFiles).toEqual(["references/guide.md", "stale.txt"]);
+    expect(plan.files.find((file) => file.path === "scripts/check.sh")?.action).toBe("write");
+
+    expect(
+      installRemoteSkills({
+        projectRoot: project,
+        tool: "claude-code",
+        scope: "project",
+        overwrite: true,
+        skills: [{ id: "demo", contents, files: replacement }],
+      }).results[0]!.status,
+    ).toBe("written");
+    expect(existsSync(join(skillDir, "references", "guide.md"))).toBe(false);
+    expect(existsSync(join(skillDir, "stale.txt"))).toBe(false);
+    expect(readFileSync(join(skillDir, "scripts", "check.sh"), "utf-8")).toContain("#!/bin/sh");
+    expect(statSync(join(skillDir, "scripts", "check.sh")).mode & 0o777).toBe(0o755);
+  });
+
+  it("rejects unsafe or inconsistent file manifests without writing", () => {
+    const project = tempDir();
+    const contents = "---\nname: demo\n---\n";
+    for (const files of [
+      [{ path: "../outside", contentsBase64: "eA==", size: 1 }],
+      [{ path: "SKILL.md", contentsBase64: "eA==", size: 1 }],
+      [
+        { path: "SKILL.md", contentsBase64: Buffer.from(contents).toString("base64"), size: 999 },
+      ],
+    ]) {
+      const result = installRemoteSkills({
+        projectRoot: project,
+        tool: "claude-code",
+        scope: "project",
+        skills: [{ id: "demo", contents, files }],
+      });
+      expect(result.results[0]!.status).toBe("error");
+    }
+    expect(existsSync(join(project, ".claude", "skills", "demo"))).toBe(false);
+    expect(existsSync(join(project, ".claude", "skills", "outside"))).toBe(false);
   });
 });

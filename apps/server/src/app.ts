@@ -649,6 +649,16 @@ app.post("/api/skills/remote/git/install", async (c) => {
           z.object({
             id: z.string().min(1),
             contents: z.string().min(1),
+            files: z
+              .array(
+                z.object({
+                  path: z.string().min(1),
+                  contentsBase64: z.string(),
+                  size: z.number().int().nonnegative(),
+                  mode: z.number().int().min(0).max(0o777).optional(),
+                }),
+              )
+              .optional(),
           }),
         )
         .min(1),

@@ -6,6 +6,7 @@ import type {
   ImportPlan,
   ImportResult,
   PackSkillsPreview,
+  RemoteSkillInstallInput,
   ScopeMode,
   SmartSkillsPreview,
   Skill,
@@ -57,11 +58,11 @@ interface Props {
   }) => Promise<SmartSkillsPreview>;
   onPickArchive: () => Promise<{ path: string } | { cancelled: true }>;
   onPreviewGitInstall: (
-    skills: Array<{ id: string; contents: string }>,
+    skills: RemoteSkillInstallInput[],
     overwrite: boolean,
   ) => Promise<GitSkillsInstallPlan["plan"]>;
   onInstallGitSkills: (
-    skills: Array<{ id: string; contents: string }>,
+    skills: RemoteSkillInstallInput[],
     overwrite: boolean,
   ) => Promise<GitSkillsInstallResult["results"]>;
 }

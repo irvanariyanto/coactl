@@ -5,6 +5,7 @@ import type {
   GitSkillsPreview,
   PackSkillsPreview,
   RemoteSkillCandidate,
+  RemoteSkillInstallInput,
   ScopeMode,
   SmartSkillsPreview,
   SkillTool,
@@ -34,11 +35,11 @@ interface Props {
   }) => Promise<SmartSkillsPreview>;
   onPickArchive: () => Promise<{ path: string } | { cancelled: true }>;
   onPreviewInstall: (
-    skills: Array<{ id: string; contents: string }>,
+    skills: RemoteSkillInstallInput[],
     overwrite: boolean,
   ) => Promise<GitSkillsInstallPlan["plan"]>;
   onInstall: (
-    skills: Array<{ id: string; contents: string }>,
+    skills: RemoteSkillInstallInput[],
     overwrite: boolean,
   ) => Promise<GitSkillsInstallResult["results"]>;
 }
@@ -73,11 +74,11 @@ export function GitInstallPanel({
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
 
-  function selectedSkills(): Array<{ id: string; contents: string }> {
+  function selectedSkills(): RemoteSkillInstallInput[] {
     if (!candidates) return [];
     return candidates
       .filter((s) => selected.has(s.repoPath))
-      .map((s) => ({ id: s.id, contents: s.contents }));
+      .map((s) => ({ id: s.id, contents: s.contents, files: s.files }));
   }
 
   function applyPreview(preview: { skills: RemoteSkillCandidate[] }, kind?: SmartSkillsPreview["kind"]) {
@@ -392,7 +393,14 @@ export function GitInstallPanel({
                         </span>
                       )}
                     </td>
-                    <td className="muted">{s.description || "—"}</td>
+                    <td className="muted">
+                      {s.description || "—"}
+                      {s.files.length > 1 && (
+                        <span style={{ display: "block", fontSize: "0.78rem" }}>
+                          {s.files.length - 1} supporting file{s.files.length === 2 ? "" : "s"}
+                        </span>
+                      )}
+                    </td>
                     <td>
                       <code className="path-line">{s.repoPath}</code>
                     </td>
@@ -474,6 +482,12 @@ export function GitInstallPanel({
                         >
                           {open ? "Hide diff" : "View diff"}
                         </button>
+                      )}
+                      {p.files.length > 1 && (
+                        <span className="muted" style={{ display: "block", fontSize: "0.78rem" }}>
+                          {p.files.length} files in this install
+                          {p.removedFiles?.length ? `; ${p.removedFiles.length} existing removed` : ""}
+                        </span>
                       )}
                     </td>
                     <td>

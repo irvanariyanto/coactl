@@ -242,6 +242,20 @@ export interface RemoteSkillCandidate {
   description: string;
   repoPath: string;
   contents: string;
+  files: RemoteSkillFile[];
+}
+
+export interface RemoteSkillFile {
+  path: string;
+  contentsBase64: string;
+  size: number;
+  mode?: number;
+}
+
+export interface RemoteSkillInstallInput {
+  id: string;
+  contents: string;
+  files?: RemoteSkillFile[];
 }
 
 export interface GitSkillsPreview {
@@ -275,6 +289,13 @@ export interface GitSkillsInstallPlan {
     action: "write" | "overwrite" | "skip" | "error";
     reason?: string;
     existingContents?: string;
+    files: Array<{
+      path: string;
+      filePath: string;
+      exists: boolean;
+      action: "write" | "overwrite" | "skip" | "error";
+    }>;
+    removedFiles?: string[];
   }>;
 }
 
@@ -462,7 +483,7 @@ export const api = {
     body: {
       tool: SkillTool;
       scope: ScopeMode;
-      skills: Array<{ id: string; contents: string }>;
+      skills: RemoteSkillInstallInput[];
       overwrite?: boolean;
     },
   ) {
@@ -476,7 +497,7 @@ export const api = {
     body: {
       tool: SkillTool;
       scope: ScopeMode;
-      skills: Array<{ id: string; contents: string }>;
+      skills: RemoteSkillInstallInput[];
       overwrite?: boolean;
     },
   ) {

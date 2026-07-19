@@ -65,7 +65,7 @@ Developers use multiple AI coding assistants (Claude Code, Cursor, Codex, Gemini
 2. **Scope first** — Global and Project are top-level modes, not filters on a mixed list.
 3. **Paths visible** — every screen that lists tools/resources shows the resolved path.
 4. **Detect from valid sources** — path candidates come from env vars + observed official locations; prefer existing dirs on disk.
-5. **Safe copy** — import preserves raw `SKILL.md` contents; overwrite is opt-in and previewed.
+5. **Safe copy** — local import preserves raw `SKILL.md`; remote install preserves the complete skill directory; overwrite is opt-in and previewed.
 6. **Skills-done before breadth** — skills polished first; Rules MVP next; Commands / Workflows after.
 7. **Vendor dirs are constrained** — some locations are readable/importable but not writable (see §13).
 
@@ -396,7 +396,7 @@ Exit criteria met: skills feel trustworthy for daily Global ↔ Project / cross-
 
 1. Deep links / router — **shipped** (URL hash; Resources hub for rule-capable tools)  
 2. Richer diff UI for import overwrite — **shipped** (preview summary counts; unified + side-by-side View diff; identical badge)  
-3. Remote git skill sources — **shipped** (scan repo for `SKILL.md`, install into native tool dirs; no `.coactl` registry)  
+3. Remote git/npm/archive skill sources — **shipped** (scan for `SKILL.md`, preserve complete native skill directories, install into native tool dirs; no `.coactl` registry)
 4. Optional login for remote/VPS — **shipped** (scrypt hash in `~/.coactl/auth.json`; session cookie; enable from Mode home)
 
 Also in 0.3.0: kind switcher + last-visited nav, empty-state path copy, list hotkeys, draft autosave, undo delete, import defaults + open written target.

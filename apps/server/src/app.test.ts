@@ -150,6 +150,44 @@ describe("smart remote preview", () => {
   });
 });
 
+describe("remote skill directory install", () => {
+  it("accepts and writes supporting file manifests", async () => {
+    const root = tempRoot();
+    const contents = "---\nname: complete\ndescription: Complete\n---\n\nBody\n";
+    const guide = "Supporting guide\n";
+    const res = await app.request(`/api/skills/remote/git/install?root=${root}`, {
+      method: "POST",
+      body: JSON.stringify({
+        tool: "claude-code",
+        scope: "project",
+        skills: [
+          {
+            id: "complete",
+            contents,
+            files: [
+              {
+                path: "SKILL.md",
+                contentsBase64: Buffer.from(contents).toString("base64"),
+                size: Buffer.byteLength(contents),
+              },
+              {
+                path: "references/guide.md",
+                contentsBase64: Buffer.from(guide).toString("base64"),
+                size: Buffer.byteLength(guide),
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect((await json(res)).results[0].status).toBe("written");
+    expect(
+      readFileSync(join(root, ".claude", "skills", "complete", "references", "guide.md"), "utf-8"),
+    ).toBe(guide);
+  });
+});
+
 describe("skills crud", () => {
   it("creates, reads, updates, and deletes a project skill", async () => {
     const root = tempRoot();
