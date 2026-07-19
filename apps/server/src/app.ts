@@ -6,39 +6,50 @@ import {
   COMMAND_TOOLS,
   RULE_TOOLS,
   SKILL_TOOLS,
+  WORKFLOW_TOOLS,
   countCommandsByTool,
   countRulesByTool,
   countSkillsByTool,
+  countWorkflowsByTool,
   deleteCommand,
   deleteRule,
   deleteSkill,
+  deleteWorkflow,
   detectSkillTools,
   getCommand,
   getRule,
   getSkill,
+  getWorkflow,
   importCommand,
   importRule,
   importSkill,
+  importWorkflow,
   listCommands,
   listRules,
   listSkills,
+  listWorkflows,
   planImportCommand,
   planImportRule,
   planImportSkill,
+  planImportWorkflow,
   resolveAllCommandPaths,
   resolveAllRulePaths,
   resolveAllSkillPaths,
+  resolveAllWorkflowPaths,
   ruleLayoutInfo,
   saveCommand,
   saveRule,
   saveSkill,
+  saveWorkflow,
   scaffoldCommand,
   scaffoldRule,
   scaffoldSkill,
+  scaffoldWorkflow,
   type CommandTool,
   type RuleTool,
   type ScopeMode,
   type SkillTool,
+  type WorkflowTool,
 } from "@coactl/domain";
 import { z } from "zod";
 
@@ -61,7 +72,9 @@ app.use("/api/*", async (c, next) => {
   await next();
 });
 
-app.get("/api/health", (c) => c.json({ ok: true, version: "0.2.1", focus: "skills+rules+commands" }));
+app.get("/api/health", (c) =>
+  c.json({ ok: true, version: "0.2.1", focus: "skills+rules+commands+workflows" }),
+);
 
 app.get("/api/workspace", (c) => {
   const projectRoot = c.get("projectRoot");
@@ -70,9 +83,11 @@ app.get("/api/workspace", (c) => {
   const counts = countSkillsByTool(projectRoot);
   const ruleCounts = countRulesByTool(projectRoot);
   const commandCounts = countCommandsByTool(projectRoot);
+  const workflowCounts = countWorkflowsByTool(projectRoot);
   const resolved = resolveAllSkillPaths(projectRoot);
   const ruleResolved = resolveAllRulePaths(projectRoot);
   const commandResolved = resolveAllCommandPaths(projectRoot);
+  const workflowResolved = resolveAllWorkflowPaths(projectRoot);
 
   const skillPathsByTool = Object.fromEntries(
     SKILL_TOOLS.map((tool) => [
@@ -142,6 +157,28 @@ app.get("/api/workspace", (c) => {
     ]),
   );
 
+  const workflowPathsByTool = Object.fromEntries(
+    WORKFLOW_TOOLS.map((tool) => [
+      tool,
+      {
+        project: {
+          path: workflowResolved[tool].project.path,
+          preferred: workflowResolved[tool].project.preferred,
+          exists: workflowResolved[tool].project.exists,
+          candidates: workflowResolved[tool].project.candidates,
+          candidateDetails: workflowResolved[tool].project.candidateDetails,
+        },
+        global: {
+          path: workflowResolved[tool].global.path,
+          preferred: workflowResolved[tool].global.preferred,
+          exists: workflowResolved[tool].global.exists,
+          candidates: workflowResolved[tool].global.candidates,
+          candidateDetails: workflowResolved[tool].global.candidateDetails,
+        },
+      },
+    ]),
+  );
+
   const toolsForMode =
     mode === "global"
       ? skillTools.filter((t) => t.installed)
@@ -155,12 +192,15 @@ app.get("/api/workspace", (c) => {
     toolSkillCounts: counts,
     toolRuleCounts: ruleCounts,
     toolCommandCounts: commandCounts,
+    toolWorkflowCounts: workflowCounts,
     skillPathsByTool,
     rulePathsByTool,
     commandPathsByTool,
+    workflowPathsByTool,
     skillToolsAvailable: SKILL_TOOLS,
     ruleToolsAvailable: RULE_TOOLS,
     commandToolsAvailable: COMMAND_TOOLS,
+    workflowToolsAvailable: WORKFLOW_TOOLS,
     ruleLayoutsByTool: Object.fromEntries(RULE_TOOLS.map((tool) => [tool, ruleLayoutInfo(tool)])),
   });
 });
@@ -743,6 +783,202 @@ app.post("/api/commands/import", async (c) => {
       return c.json(planImportCommand(options));
     }
     return c.json(importCommand(options));
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 404);
+  }
+});
+
+function serializeWorkflow(r: {
+  id: string;
+  tool: WorkflowTool;
+  scope: ScopeMode;
+  name: string;
+  description: string;
+  filePath: string;
+  body: string;
+  contents: string;
+  extension: "js";
+  readOnly: boolean;
+}) {
+  return {
+    id: r.id,
+    tool: r.tool,
+    scope: r.scope,
+    name: r.name,
+    description: r.description,
+    filePath: r.filePath,
+    body: r.body,
+    contents: r.contents,
+    extension: r.extension,
+    readOnly: r.readOnly,
+  };
+}
+
+app.get("/api/workflows", (c) => {
+  const projectRoot = c.get("projectRoot");
+  const tool = c.req.query("tool") as WorkflowTool | undefined;
+  const scope = (c.req.query("scope") === "global" ? "global" : "project") as ScopeMode;
+
+  if (tool && !(WORKFLOW_TOOLS as readonly string[]).includes(tool)) {
+    return c.json({ error: `Unsupported workflow tool: ${tool}` }, 400);
+  }
+
+  const workflows = listWorkflows({ projectRoot, tool, scope }).map(serializeWorkflow);
+  return c.json({ workflows });
+});
+
+app.get("/api/workflows/:tool/:id", (c) => {
+  const tool = c.req.param("tool") as WorkflowTool;
+  const id = c.req.param("id");
+  const scope = (c.req.query("scope") === "global" ? "global" : "project") as ScopeMode;
+  const path = c.req.query("path") || undefined;
+
+  if (!(WORKFLOW_TOOLS as readonly string[]).includes(tool)) {
+    return c.json({ error: `Unsupported workflow tool: ${tool}` }, 400);
+  }
+
+  const workflow = getWorkflow(c.get("projectRoot"), tool, id, scope, {}, path);
+  if (!workflow) return c.json({ error: "Workflow not found" }, 404);
+  return c.json({ workflow: serializeWorkflow(workflow) });
+});
+
+const WorkflowUpsertSchema = z.object({
+  tool: z.enum(WORKFLOW_TOOLS),
+  scope: z.enum(["project", "global"]),
+  id: z.string(),
+  name: z.string().optional(),
+  description: z.string().optional(),
+  body: z.string().optional(),
+  contents: z.string().optional(),
+  filePath: z.string().optional(),
+});
+
+app.post("/api/workflows", async (c) => {
+  const body = WorkflowUpsertSchema.parse(await c.req.json());
+  const existing = getWorkflow(c.get("projectRoot"), body.tool, body.id, body.scope);
+  if (existing) return c.json({ error: `Workflow already exists: ${body.tool}/${body.id}` }, 409);
+
+  try {
+    const workflow = saveWorkflow({
+      projectRoot: c.get("projectRoot"),
+      ...body,
+    });
+    return c.json({ workflow: serializeWorkflow(workflow) }, 201);
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 400);
+  }
+});
+
+app.put("/api/workflows/:tool/:id", async (c) => {
+  const tool = c.req.param("tool") as WorkflowTool;
+  const id = c.req.param("id");
+  const body = WorkflowUpsertSchema.omit({ tool: true, id: true })
+    .extend({
+      tool: z.enum(WORKFLOW_TOOLS).optional(),
+      id: z.string().optional(),
+    })
+    .parse(await c.req.json());
+
+  if (!(WORKFLOW_TOOLS as readonly string[]).includes(tool)) {
+    return c.json({ error: `Unsupported workflow tool: ${tool}` }, 400);
+  }
+
+  try {
+    const workflow = saveWorkflow({
+      projectRoot: c.get("projectRoot"),
+      tool,
+      id,
+      scope: body.scope,
+      name: body.name,
+      description: body.description,
+      body: body.body,
+      contents: body.contents,
+      filePath: body.filePath,
+    });
+    return c.json({ workflow: serializeWorkflow(workflow) });
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 400);
+  }
+});
+
+app.delete("/api/workflows/:tool/:id", (c) => {
+  const tool = c.req.param("tool") as WorkflowTool;
+  const id = c.req.param("id");
+  const scope = (c.req.query("scope") === "global" ? "global" : "project") as ScopeMode;
+  const path = c.req.query("path") || undefined;
+
+  if (!(WORKFLOW_TOOLS as readonly string[]).includes(tool)) {
+    return c.json({ error: `Unsupported workflow tool: ${tool}` }, 400);
+  }
+
+  try {
+    const ok = deleteWorkflow(c.get("projectRoot"), tool, id, scope, {}, path);
+    if (!ok) return c.json({ error: "Workflow not found" }, 404);
+    return c.json({ ok: true });
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 400);
+  }
+});
+
+app.post("/api/workflows/scaffold", async (c) => {
+  const body = z
+    .object({
+      id: z.string(),
+      description: z.string().optional(),
+      tool: z.enum(WORKFLOW_TOOLS),
+      scope: z.enum(["project", "global"]).default("project"),
+      save: z.boolean().optional(),
+    })
+    .parse(await c.req.json());
+
+  const scaffold = scaffoldWorkflow(body.tool, body.id, body.description);
+  if (body.save) {
+    const workflow = saveWorkflow({
+      projectRoot: c.get("projectRoot"),
+      tool: body.tool,
+      scope: body.scope,
+      id: scaffold.id,
+      contents: scaffold.contents,
+    });
+    return c.json({ workflow: serializeWorkflow(workflow) }, 201);
+  }
+  return c.json(scaffold);
+});
+
+app.post("/api/workflows/import", async (c) => {
+  const body = z
+    .object({
+      source: z.object({
+        tool: z.enum(WORKFLOW_TOOLS),
+        scope: z.enum(["project", "global"]),
+        id: z.string(),
+      }),
+      targets: z
+        .array(
+          z.object({
+            tool: z.enum(WORKFLOW_TOOLS),
+            scope: z.enum(["project", "global"]),
+          }),
+        )
+        .min(1),
+      overwrite: z.boolean().optional(),
+      dryRun: z.boolean().optional(),
+    })
+    .parse(await c.req.json());
+
+  const dryRun = body.dryRun || c.req.query("dryRun") === "1";
+
+  try {
+    const options = {
+      projectRoot: c.get("projectRoot"),
+      source: body.source,
+      targets: body.targets,
+      overwrite: body.overwrite,
+    };
+    if (dryRun) {
+      return c.json(planImportWorkflow(options));
+    }
+    return c.json(importWorkflow(options));
   } catch (err) {
     return c.json({ error: (err as Error).message }, 404);
   }

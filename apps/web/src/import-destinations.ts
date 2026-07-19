@@ -1,4 +1,4 @@
-import type { CommandTool, RuleTool, ScopeMode, SkillTool, Workspace } from "./api";
+import type { CommandTool, RuleTool, ScopeMode, SkillTool, WorkflowTool, Workspace } from "./api";
 import type { Mode } from "./nav";
 
 export interface ImportDestination {
@@ -87,6 +87,35 @@ export function buildCommandDestinations(
         scope === "project"
           ? workspace.commandPathsByTool[tool]?.project
           : workspace.commandPathsByTool[tool]?.global;
+      const skillInfo = workspace.skillTools.find((t) => t.target === tool);
+      out.push({
+        key: `${tool}:${scope}`,
+        tool,
+        scope,
+        installed: skillInfo?.installed ?? false,
+        path: info?.preferred ?? "",
+      });
+    }
+  }
+  return out;
+}
+
+/** Workflow import targets — claude-code only, so destinations are mainly cross-scope. */
+export function buildWorkflowDestinations(
+  sourceTool: WorkflowTool,
+  sourceMode: Mode,
+  workspace: Workspace,
+  projectRootSet: boolean,
+): ImportDestination[] {
+  const scopes: ScopeMode[] = projectRootSet ? ["global", "project"] : ["global"];
+  const out: ImportDestination[] = [];
+  for (const tool of workspace.workflowToolsAvailable) {
+    for (const scope of scopes) {
+      if (tool === sourceTool && scope === sourceMode) continue;
+      const info =
+        scope === "project"
+          ? workspace.workflowPathsByTool[tool]?.project
+          : workspace.workflowPathsByTool[tool]?.global;
       const skillInfo = workspace.skillTools.find((t) => t.target === tool);
       out.push({
         key: `${tool}:${scope}`,

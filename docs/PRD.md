@@ -112,7 +112,7 @@ Commands / Workflows remain Phase B (later).
 | Mode home | Two clear choices: Global / Project |
 | Project gate | Prefer **Continue** on the active root; recent projects secondary; typed path + Browse for new folders; persist root + up to 8 recents in `localStorage` |
 | Tools | Cards with skill + rule counts; click opens **Resources** hub |
-| Resources | Hub (`#/{mode}/{tool}`): Skills + Rules always; Commands when the tool has a native slash-command dir; Workflows “Coming soon” |
+| Resources | Hub (`#/{mode}/{tool}`): Skills + Rules always; Commands / Workflows when the tool supports them |
 | Skills list | Card grid with filter; path banner; inline create; multi-select bulk delete / import |
 | Skill detail | Edit full `SKILL.md`; save/delete; import preview → apply |
 | Rules list | Multi-file rule cards or singleton instruction file (`AGENTS.md` / `GEMINI.md`) |
@@ -201,7 +201,7 @@ API must reject writes into read-only roots with a clear error.
 | Skills | Done (+ Phase A polish) |
 | Rules | **Shipped** for all skill tools (multi-file dirs + AGENTS/GEMINI singletons) |
 | Commands | **Shipped** for Claude / Cursor / OpenCode / Antigravity (slash `.md` files) |
-| Workflows | Phase B (later) — Claude-native first; Antigravity slash workflows live under Commands for now |
+| Workflows | **Shipped** for Claude Code dynamic workflows (`.js` under `.claude/workflows`); Antigravity markdown workflows stay under Commands |
 
 Rules principles: native paths, Global/Project split, visible paths, import across tools/scopes with dry-run preview.
 
@@ -249,6 +249,14 @@ Skill file shape: `<skillsDir>/<id>/SKILL.md`.
 
 Codex / Gemini / Zed: no first-class commands directory in this matrix (skipped).
 
+### 8.3 Workflows path matrix (Claude Code)
+
+| Tool | Project | Global | File |
+|------|---------|--------|------|
+| Claude Code | `<root>/.claude/workflows/<id>.js` | `$CLAUDE_CONFIG_DIR/workflows` or `~/.claude/workflows` | JS script with `export const meta` + orchestration body |
+
+Saved workflows become slash-invokable in Claude Code. Antigravity’s markdown workflows remain under **Commands** (`.agents/workflows/*.md`).
+
 ---
 
 ## 9. Architecture
@@ -293,8 +301,8 @@ Common query: `root` (absolute project path; used for project scope and path res
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/api/health` | `{ ok, version, focus: "skills+rules+commands" }` |
-| GET | `/api/workspace?mode=global\|project&root=` | Tools, skill/rule/command counts, resolved paths |
+| GET | `/api/health` | `{ ok, version, focus: "skills+rules+commands+workflows" }` |
+| GET | `/api/workspace?mode=global\|project&root=` | Tools, skill/rule/command/workflow counts, resolved paths |
 | GET | `/api/skills?tool=&scope=` | List skills (one row per physical path; `readOnly` flag) |
 | GET | `/api/skills/:tool/:id?scope=&path=` | Read one skill (`path` disambiguates duplicates) |
 | POST | `/api/skills` | Create (preferred writable dir) |
@@ -314,6 +322,11 @@ Common query: `root` (absolute project path; used for project scope and path res
 | POST | `/api/commands` | Create command |
 | POST | `/api/commands/scaffold` | Scaffold (+ save) |
 | POST | `/api/commands/import` | Cross-tool / cross-scope copy; `dryRun` previews |
+| GET | `/api/workflows?tool=&scope=` | List Claude dynamic workflow scripts |
+| GET/PUT/DELETE | `/api/workflows/:tool/:id?scope=&path=` | Read / update / delete workflow `.js` |
+| POST | `/api/workflows` | Create workflow |
+| POST | `/api/workflows/scaffold` | Scaffold (+ save) |
+| POST | `/api/workflows/import` | Cross-scope copy; `dryRun` previews |
 | POST | `/api/pick-folder` | Native OS folder dialog; returns absolute path |
 
 ### Import request
@@ -378,7 +391,7 @@ Exit criteria met: skills feel trustworthy for daily Global ↔ Project / cross-
 
 1. **Rules** — **shipped** for all skill tools (multi-file + AGENTS/GEMINI)  
 2. **Commands** — **shipped** for Claude / Cursor / OpenCode / Antigravity  
-3. **Workflows** — Claude-native first (Antigravity workflows already under Commands)  
+3. **Workflows** — **shipped** for Claude Code (`.claude/workflows/*.js`); Antigravity under Commands  
 
 ### Phase C — Nice-to-have
 

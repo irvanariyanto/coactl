@@ -12,6 +12,8 @@ export type RuleTool = SkillTool;
 
 export type CommandTool = "claude-code" | "cursor" | "opencode" | "antigravity";
 
+export type WorkflowTool = "claude-code";
+
 export type View =
   | { screen: "mode" }
   | { screen: "project-gate" }
@@ -22,7 +24,9 @@ export type View =
   | { screen: "rules"; mode: Mode; tool: RuleTool }
   | { screen: "rule"; mode: Mode; tool: RuleTool; id: string; path?: string }
   | { screen: "commands"; mode: Mode; tool: CommandTool }
-  | { screen: "command"; mode: Mode; tool: CommandTool; id: string; path?: string };
+  | { screen: "command"; mode: Mode; tool: CommandTool; id: string; path?: string }
+  | { screen: "workflows"; mode: Mode; tool: WorkflowTool }
+  | { screen: "workflow"; mode: Mode; tool: WorkflowTool; id: string; path?: string };
 
 export function modeToScope(mode: Mode): "global" | "project" {
   return mode;
@@ -48,6 +52,11 @@ const COMMAND_TOOLS: readonly CommandTool[] = ["claude-code", "cursor", "opencod
 /** Tools with native slash-command (or workflow) markdown files. */
 export function supportsCommands(tool: SkillTool): tool is CommandTool {
   return COMMAND_TOOLS.includes(tool as CommandTool);
+}
+
+/** Tools with Claude Code dynamic workflow scripts (.js under .claude/workflows/). */
+export function supportsWorkflows(tool: SkillTool): tool is WorkflowTool {
+  return tool === "claude-code";
 }
 
 /** Serialize a view into a shareable URL hash (deep links survive refresh). */
@@ -77,6 +86,12 @@ export function viewToHash(view: View): string {
       return `#/${view.mode}/${view.tool}/commands`;
     case "command": {
       const base = `#/${view.mode}/${view.tool}/commands/${encodeURIComponent(view.id)}`;
+      return view.path ? `${base}?path=${encodeURIComponent(view.path)}` : base;
+    }
+    case "workflows":
+      return `#/${view.mode}/${view.tool}/workflows`;
+    case "workflow": {
+      const base = `#/${view.mode}/${view.tool}/workflows/${encodeURIComponent(view.id)}`;
       return view.path ? `${base}?path=${encodeURIComponent(view.path)}` : base;
     }
   }
@@ -114,6 +129,13 @@ export function parseHash(hash: string): View | null {
     const path = new URLSearchParams(queryPart ?? "").get("path") ?? undefined;
     return { screen: "command", mode, tool, id, path };
   }
+  if (kind === "workflows") {
+    if (!supportsWorkflows(tool)) return null;
+    if (segs.length === 3) return { screen: "workflows", mode, tool };
+    const id = decodeURIComponent(segs[3]!);
+    const path = new URLSearchParams(queryPart ?? "").get("path") ?? undefined;
+    return { screen: "workflow", mode, tool, id, path };
+  }
   return null;
 }
 
@@ -139,4 +161,8 @@ export function formatRuleDestPath(
 
 export function formatCommandDestPath(dir: string, idHint: string): string {
   return `${dir}/${idHint}.md`;
+}
+
+export function formatWorkflowDestPath(dir: string, idHint: string): string {
+  return `${dir}/${idHint}.js`;
 }

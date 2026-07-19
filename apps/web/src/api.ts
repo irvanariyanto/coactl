@@ -14,6 +14,8 @@ export type RuleTool = SkillTool;
 
 export type CommandTool = "claude-code" | "cursor" | "opencode" | "antigravity";
 
+export type WorkflowTool = "claude-code";
+
 export type RuleShape = "multi" | "singleton";
 
 export interface RuleLayoutInfo {
@@ -91,6 +93,21 @@ export interface Command {
   readOnly: boolean;
 }
 
+export type WorkflowPathInfo = SkillPathInfo;
+
+export interface Workflow {
+  id: string;
+  tool: WorkflowTool;
+  scope: ScopeMode;
+  name: string;
+  description: string;
+  filePath: string;
+  body: string;
+  contents: string;
+  extension: "js";
+  readOnly: boolean;
+}
+
 export interface Workspace {
   projectRoot: string;
   mode: Mode;
@@ -99,15 +116,21 @@ export interface Workspace {
   toolSkillCounts: Record<SkillTool, { project: number; global: number }>;
   toolRuleCounts: Record<RuleTool, { project: number; global: number }>;
   toolCommandCounts: Record<CommandTool, { project: number; global: number }>;
+  toolWorkflowCounts: Record<WorkflowTool, { project: number; global: number }>;
   skillPathsByTool: Record<SkillTool, { project: SkillPathInfo; global: SkillPathInfo }>;
   rulePathsByTool: Record<RuleTool, { project: RulePathInfo; global: RulePathInfo }>;
   commandPathsByTool: Record<
     CommandTool,
     { project: CommandPathInfo; global: CommandPathInfo }
   >;
+  workflowPathsByTool: Record<
+    WorkflowTool,
+    { project: WorkflowPathInfo; global: WorkflowPathInfo }
+  >;
   skillToolsAvailable: SkillTool[];
   ruleToolsAvailable: RuleTool[];
   commandToolsAvailable: CommandTool[];
+  workflowToolsAvailable: WorkflowTool[];
   ruleLayoutsByTool: Record<RuleTool, RuleLayoutInfo>;
 }
 
@@ -173,6 +196,30 @@ export interface CommandImportResult {
 export interface CommandImportPlan {
   plan: Array<{
     tool: CommandTool;
+    scope: ScopeMode;
+    id: string;
+    filePath: string;
+    exists: boolean;
+    action: "write" | "overwrite" | "skip" | "error";
+    reason?: string;
+    existingContents?: string;
+  }>;
+}
+
+export interface WorkflowImportResult {
+  results: Array<{
+    tool: WorkflowTool;
+    scope: ScopeMode;
+    id: string;
+    status: "written" | "skipped" | "error";
+    error?: string;
+    filePath?: string;
+  }>;
+}
+
+export interface WorkflowImportPlan {
+  plan: Array<{
+    tool: WorkflowTool;
     scope: ScopeMode;
     id: string;
     filePath: string;
@@ -425,6 +472,88 @@ export const api = {
     },
   ) {
     return request<CommandImportPlan>(`/api/commands/import${qs(root)}`, {
+      method: "POST",
+      body: JSON.stringify({ ...body, dryRun: true }),
+    });
+  },
+  listWorkflows(root: string, tool: WorkflowTool, scope: ScopeMode) {
+    return request<{ workflows: Workflow[] }>(`/api/workflows${qs(root, { tool, scope })}`);
+  },
+  getWorkflow(root: string, tool: WorkflowTool, id: string, scope: ScopeMode, path?: string) {
+    return request<{ workflow: Workflow }>(
+      `/api/workflows/${tool}/${id}${qs(root, { scope, ...(path ? { path } : {}) })}`,
+    );
+  },
+  saveWorkflow(
+    root: string,
+    workflow: {
+      tool: WorkflowTool;
+      scope: ScopeMode;
+      id: string;
+      contents?: string;
+      filePath?: string;
+    },
+    create: boolean,
+  ) {
+    if (create) {
+      return request<{ workflow: Workflow }>(`/api/workflows${qs(root)}`, {
+        method: "POST",
+        body: JSON.stringify(workflow),
+      });
+    }
+    return request<{ workflow: Workflow }>(
+      `/api/workflows/${workflow.tool}/${workflow.id}${qs(root)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(workflow),
+      },
+    );
+  },
+  deleteWorkflow(
+    root: string,
+    tool: WorkflowTool,
+    id: string,
+    scope: ScopeMode,
+    path?: string,
+  ) {
+    return request(
+      `/api/workflows/${tool}/${id}${qs(root, { scope, ...(path ? { path } : {}) })}`,
+      {
+        method: "DELETE",
+      },
+    );
+  },
+  scaffoldWorkflow(
+    root: string,
+    body: { id: string; tool: WorkflowTool; scope: ScopeMode; description?: string; save?: boolean },
+  ) {
+    return request<{ workflow: Workflow }>(`/api/workflows/scaffold${qs(root)}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+  importWorkflow(
+    root: string,
+    body: {
+      source: { tool: WorkflowTool; scope: ScopeMode; id: string };
+      targets: Array<{ tool: WorkflowTool; scope: ScopeMode }>;
+      overwrite?: boolean;
+    },
+  ) {
+    return request<WorkflowImportResult>(`/api/workflows/import${qs(root)}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+  previewWorkflowImport(
+    root: string,
+    body: {
+      source: { tool: WorkflowTool; scope: ScopeMode; id: string };
+      targets: Array<{ tool: WorkflowTool; scope: ScopeMode }>;
+      overwrite?: boolean;
+    },
+  ) {
+    return request<WorkflowImportPlan>(`/api/workflows/import${qs(root)}`, {
       method: "POST",
       body: JSON.stringify({ ...body, dryRun: true }),
     });

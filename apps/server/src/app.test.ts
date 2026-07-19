@@ -38,7 +38,7 @@ describe("api basics", () => {
     expect(res.status).toBe(200);
     const body = await json(res);
     expect(body.ok).toBe(true);
-    expect(body.focus).toBe("skills+rules+commands");
+    expect(body.focus).toBe("skills+rules+commands+workflows");
   });
 
   it("rejects unsupported tools with 400", async () => {
@@ -456,5 +456,25 @@ describe("commands crud + import", () => {
     const { results } = await json(apply);
     expect(results[0].status).toBe("written");
     expect(results[0].filePath).toContain(join(".agents", "workflows", "review-pr.md"));
+  });
+});
+
+describe("workflows crud", () => {
+  it("creates a claude dynamic workflow script", async () => {
+    const root = tempRoot();
+    const create = await app.request(`/api/workflows?root=${root}`, {
+      method: "POST",
+      body: JSON.stringify({
+        tool: "claude-code",
+        scope: "project",
+        id: "audit-routes",
+        description: "Audit routes",
+      }),
+    });
+    expect(create.status).toBe(201);
+    const created = await json(create);
+    expect(created.workflow.filePath).toContain(join(".claude", "workflows", "audit-routes.js"));
+    expect(created.workflow.contents).toContain("export const meta");
+    expect(created.workflow.extension).toBe("js");
   });
 });

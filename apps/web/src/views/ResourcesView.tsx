@@ -1,4 +1,4 @@
-import { toolLabel, supportsCommands, type Mode, type SkillTool } from "../nav";
+import { toolLabel, supportsCommands, supportsWorkflows, type Mode, type SkillTool } from "../nav";
 import type { Workspace } from "../api";
 import { PathCandidates } from "../components/PathCandidates";
 
@@ -9,6 +9,7 @@ interface Props {
   onSelectSkills: () => void;
   onSelectRules: () => void;
   onSelectCommands: () => void;
+  onSelectWorkflows: () => void;
 }
 
 /** Hub for resource kinds — Skills + Rules for every skill-capable tool. */
@@ -19,14 +20,17 @@ export function ResourcesView({
   onSelectSkills,
   onSelectRules,
   onSelectCommands,
+  onSelectWorkflows,
 }: Props) {
   const skillPaths = workspace.skillPathsByTool[tool];
   const rulePaths = workspace.rulePathsByTool[tool];
   const commandPaths = supportsCommands(tool) ? workspace.commandPathsByTool[tool] : undefined;
+  const workflowPaths = supportsWorkflows(tool) ? workspace.workflowPathsByTool[tool] : undefined;
   const layout = workspace.ruleLayoutsByTool[tool];
   const activeSkills = mode === "global" ? skillPaths?.global : skillPaths?.project;
   const activeRules = mode === "global" ? rulePaths?.global : rulePaths?.project;
   const activeCommands = mode === "global" ? commandPaths?.global : commandPaths?.project;
+  const activeWorkflows = mode === "global" ? workflowPaths?.global : workflowPaths?.project;
   const skillCount =
     mode === "global"
       ? workspace.toolSkillCounts[tool]?.global ?? 0
@@ -40,6 +44,11 @@ export function ResourcesView({
       ? workspace.toolCommandCounts[tool]?.global ?? 0
       : workspace.toolCommandCounts[tool]?.project ?? 0
     : 0;
+  const workflowCount = supportsWorkflows(tool)
+    ? mode === "global"
+      ? workspace.toolWorkflowCounts[tool]?.global ?? 0
+      : workspace.toolWorkflowCounts[tool]?.project ?? 0
+    : 0;
 
   const ruleBlurb =
     layout?.shape === "singleton"
@@ -51,6 +60,10 @@ export function ResourcesView({
     ? commandKind === "workflow"
       ? `${commandCount} workflow file${commandCount === 1 ? "" : "s"} (.md)`
       : `${commandCount} command file${commandCount === 1 ? "" : "s"} (.md)`
+    : "Coming soon";
+
+  const workflowBlurb = supportsWorkflows(tool)
+    ? `${workflowCount} workflow script${workflowCount === 1 ? "" : "s"} (.js)`
     : "Coming soon";
 
   const kinds = [
@@ -72,7 +85,12 @@ export function ResourcesView({
       enabled: supportsCommands(tool),
       blurb: commandBlurb,
     },
-    { id: "workflows" as const, label: "Workflows", enabled: false, blurb: "Coming soon" },
+    {
+      id: "workflows" as const,
+      label: "Workflows",
+      enabled: supportsWorkflows(tool),
+      blurb: workflowBlurb,
+    },
   ];
 
   return (
@@ -104,6 +122,11 @@ export function ResourcesView({
           />
         </div>
       )}
+      {activeWorkflows && (
+        <div style={{ marginTop: "0.65rem" }}>
+          <PathCandidates info={activeWorkflows} label="Active workflows path" />
+        </div>
+      )}
       <div className="tool-grid" style={{ marginTop: "1rem" }}>
         {kinds.map((kind) => (
           <button
@@ -115,6 +138,7 @@ export function ResourcesView({
               if (kind.id === "skills") onSelectSkills();
               if (kind.id === "rules") onSelectRules();
               if (kind.id === "commands") onSelectCommands();
+              if (kind.id === "workflows") onSelectWorkflows();
             }}
           >
             <span className="tool-card-head">

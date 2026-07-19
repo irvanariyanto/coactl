@@ -14,9 +14,22 @@ import {
   type ScopeMode,
   type Skill,
   type SkillTool,
+  type Workflow,
+  type WorkflowImportPlan,
+  type WorkflowImportResult,
+  type WorkflowTool,
   type Workspace,
 } from "./api";
-import { modeToScope, parseHash, supportsCommands, toolLabel, viewToHash, type Mode, type View } from "./nav";
+import {
+  modeToScope,
+  parseHash,
+  supportsCommands,
+  supportsWorkflows,
+  toolLabel,
+  viewToHash,
+  type Mode,
+  type View,
+} from "./nav";
 import {
   forgetProject,
   loadRecentProjects,
@@ -33,6 +46,8 @@ import { RulesListView } from "./views/RulesListView";
 import { SkillDetailView } from "./views/SkillDetailView";
 import { SkillsListView } from "./views/SkillsListView";
 import { ToolsView } from "./views/ToolsView";
+import { WorkflowDetailView } from "./views/WorkflowDetailView";
+import { WorkflowsListView } from "./views/WorkflowsListView";
 
 interface Toast {
   id: number;
@@ -64,9 +79,12 @@ export function App() {
   const [rulesVersion, setRulesVersion] = useState(0);
   const [commands, setCommands] = useState<Command[]>([]);
   const [commandsVersion, setCommandsVersion] = useState(0);
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [workflowsVersion, setWorkflowsVersion] = useState(0);
   const [draft, setDraft] = useState<Skill | null>(null);
   const [ruleDraft, setRuleDraft] = useState<Rule | null>(null);
   const [commandDraft, setCommandDraft] = useState<Command | null>(null);
+  const [workflowDraft, setWorkflowDraft] = useState<Workflow | null>(null);
   const [savedContents, setSavedContents] = useState<string | null>(null);
   const [showAllInstalled, setShowAllInstalled] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -88,7 +106,11 @@ export function App() {
     (view.screen === "command" &&
       commandDraft !== null &&
       savedContents !== null &&
-      commandDraft.contents !== savedContents);
+      commandDraft.contents !== savedContents) ||
+    (view.screen === "workflow" &&
+      workflowDraft !== null &&
+      savedContents !== null &&
+      workflowDraft.contents !== savedContents);
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
   const viewRef = useRef(view);
@@ -230,9 +252,32 @@ export function App() {
   }, [view, effectiveRoot, pushToast, commandsVersion]);
 
   useEffect(() => {
+    if (view.screen !== "workflows" && view.screen !== "workflow") return;
+    const scope = modeToScope(view.mode);
+    let cancelled = false;
+    setBusy(true);
+    void api
+      .listWorkflows(effectiveRoot, view.tool, scope)
+      .then((res) => {
+        if (!cancelled) setWorkflows(res.workflows);
+      })
+      .catch((err) => {
+        if (!cancelled) pushToast("error", (err as Error).message);
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, effectiveRoot, pushToast, workflowsVersion]);
+
+  useEffect(() => {
     if (view.screen !== "skill") {
       setDraft(null);
-      if (view.screen !== "rule" && view.screen !== "command") setSavedContents(null);
+      if (view.screen !== "rule" && view.screen !== "command" && view.screen !== "workflow") {
+        setSavedContents(null);
+      }
       return;
     }
     const scope = modeToScope(view.mode);
@@ -298,6 +343,33 @@ export function App() {
         if (!cancelled) {
           setCommandDraft(res.command);
           setSavedContents(res.command.contents);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) pushToast("error", (err as Error).message);
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, effectiveRoot, pushToast]);
+
+  useEffect(() => {
+    if (view.screen !== "workflow") {
+      setWorkflowDraft(null);
+      return;
+    }
+    const scope = modeToScope(view.mode);
+    let cancelled = false;
+    setBusy(true);
+    void api
+      .getWorkflow(effectiveRoot, view.tool, view.id, scope, view.path)
+      .then((res) => {
+        if (!cancelled) {
+          setWorkflowDraft(res.workflow);
+          setSavedContents(res.workflow.contents);
         }
       })
       .catch((err) => {
@@ -429,6 +501,31 @@ export function App() {
     }
   }
 
+  async function handleCreateWorkflow(id: string) {
+    if (view.screen !== "workflows") return;
+    setBusy(true);
+    try {
+      const { workflow } = await api.scaffoldWorkflow(effectiveRoot, {
+        id,
+        tool: view.tool,
+        scope: modeToScope(view.mode),
+        save: true,
+      });
+      pushToast("success", `Created ${workflow.id}`);
+      navigate({
+        screen: "workflow",
+        mode: view.mode,
+        tool: view.tool,
+        id: workflow.id,
+        path: workflow.filePath,
+      });
+    } catch (err) {
+      pushToast("error", (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleSave() {
     if (!draft || view.screen !== "skill") return;
     setBusy(true);
@@ -504,6 +601,31 @@ export function App() {
     }
   }
 
+  async function handleSaveWorkflow() {
+    if (!workflowDraft || view.screen !== "workflow") return;
+    setBusy(true);
+    try {
+      const { workflow } = await api.saveWorkflow(
+        effectiveRoot,
+        {
+          tool: workflowDraft.tool,
+          scope: workflowDraft.scope,
+          id: workflowDraft.id,
+          contents: workflowDraft.contents,
+          filePath: workflowDraft.filePath,
+        },
+        false,
+      );
+      setWorkflowDraft(workflow);
+      setSavedContents(workflow.contents);
+      pushToast("success", "Saved");
+    } catch (err) {
+      pushToast("error", (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleDelete() {
     if (!draft || view.screen !== "skill") return;
     if (!confirm(`Delete ${draft.tool}/${draft.id}?`)) return;
@@ -554,6 +676,27 @@ export function App() {
       );
       pushToast("success", `Deleted ${commandDraft.id}`);
       setView({ screen: "commands", mode: view.mode, tool: view.tool });
+    } catch (err) {
+      pushToast("error", (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteWorkflow() {
+    if (!workflowDraft || view.screen !== "workflow") return;
+    if (!confirm(`Delete ${workflowDraft.tool}/${workflowDraft.id}?`)) return;
+    setBusy(true);
+    try {
+      await api.deleteWorkflow(
+        effectiveRoot,
+        workflowDraft.tool,
+        workflowDraft.id,
+        workflowDraft.scope,
+        workflowDraft.filePath,
+      );
+      pushToast("success", `Deleted ${workflowDraft.id}`);
+      setView({ screen: "workflows", mode: view.mode, tool: view.tool });
     } catch (err) {
       pushToast("error", (err as Error).message);
     } finally {
@@ -803,6 +946,85 @@ export function App() {
     return results;
   }
 
+  async function handleBulkDeleteWorkflows(rows: Workflow[]) {
+    if (!rows.length) return;
+    const names = rows.map((r) => r.id).join(", ");
+    if (
+      !confirm(
+        `Delete ${rows.length} workflow${rows.length === 1 ? "" : "s"} (${names})? This removes the files.`,
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    let ok = 0;
+    const errors: string[] = [];
+    for (const r of rows) {
+      try {
+        await api.deleteWorkflow(effectiveRoot, r.tool, r.id, r.scope, r.filePath);
+        ok += 1;
+      } catch (err) {
+        errors.push(`${r.id}: ${(err as Error).message}`);
+      }
+    }
+    setBusy(false);
+    setWorkflowsVersion((v) => v + 1);
+    if (currentMode) void refreshWorkspace(currentMode);
+    if (errors.length) {
+      pushToast("error", `Deleted ${ok}, failed ${errors.length}: ${errors.join("; ")}`);
+    } else {
+      pushToast("success", `Deleted ${ok} workflow${ok === 1 ? "" : "s"}`);
+    }
+  }
+
+  async function handleBulkPreviewWorkflows(
+    sources: Workflow[],
+    targets: Array<{ tool: WorkflowTool; scope: ScopeMode }>,
+    overwrite: boolean,
+  ): Promise<WorkflowImportPlan["plan"]> {
+    const plan: WorkflowImportPlan["plan"] = [];
+    for (const s of sources) {
+      const res = await api.previewWorkflowImport(effectiveRoot, {
+        source: { tool: s.tool, scope: s.scope, id: s.id },
+        targets,
+        overwrite,
+      });
+      plan.push(...res.plan);
+    }
+    return plan;
+  }
+
+  async function handleBulkImportWorkflows(
+    sources: Workflow[],
+    targets: Array<{ tool: WorkflowTool; scope: ScopeMode }>,
+    overwrite: boolean,
+  ): Promise<WorkflowImportResult["results"]> {
+    setBusy(true);
+    const results: WorkflowImportResult["results"] = [];
+    try {
+      for (const s of sources) {
+        const res = await api.importWorkflow(effectiveRoot, {
+          source: { tool: s.tool, scope: s.scope, id: s.id },
+          targets,
+          overwrite,
+        });
+        results.push(...res.results);
+      }
+    } finally {
+      setBusy(false);
+    }
+    const written = results.filter((r) => r.status === "written").length;
+    const skipped = results.filter((r) => r.status === "skipped").length;
+    const failed = results.filter((r) => r.status === "error").length;
+    pushToast(
+      failed ? "error" : "success",
+      `Import finished: ${written} written, ${skipped} skipped${failed ? `, ${failed} failed` : ""}`,
+    );
+    if (currentMode) void refreshWorkspace(currentMode);
+    setWorkflowsVersion((v) => v + 1);
+    return results;
+  }
+
   const crumbs: Array<{ label: string; onClick?: () => void }> = [];
   if (view.screen !== "mode") {
     crumbs.push({ label: "Home", onClick: () => navigate({ screen: "mode" }) });
@@ -818,7 +1040,9 @@ export function App() {
     view.screen === "rules" ||
     view.screen === "rule" ||
     view.screen === "commands" ||
-    view.screen === "command"
+    view.screen === "command" ||
+    view.screen === "workflows" ||
+    view.screen === "workflow"
   ) {
     const modeLabel =
       view.mode === "project" && root.trim()
@@ -838,7 +1062,9 @@ export function App() {
     view.screen === "rules" ||
     view.screen === "rule" ||
     view.screen === "commands" ||
-    view.screen === "command"
+    view.screen === "command" ||
+    view.screen === "workflows" ||
+    view.screen === "workflow"
   ) {
     crumbs.push({
       label: toolLabel(view.tool),
@@ -875,16 +1101,29 @@ export function App() {
   if (view.screen === "command") {
     crumbs.push({ label: view.id });
   }
+  if (view.screen === "workflows" || view.screen === "workflow") {
+    crumbs.push({
+      label: "Workflows",
+      onClick: () => navigate({ screen: "workflows", mode: view.mode, tool: view.tool }),
+    });
+  }
+  if (view.screen === "workflow") {
+    crumbs.push({ label: view.id });
+  }
 
   const showRootControl =
     view.screen === "project-gate" ||
     currentMode === "project" ||
     view.screen === "skill" ||
     view.screen === "rule" ||
-    view.screen === "command";
+    view.screen === "command" ||
+    view.screen === "workflow";
   const rootControlForImportOnly =
     currentMode === "global" &&
-    (view.screen === "skill" || view.screen === "rule" || view.screen === "command");
+    (view.screen === "skill" ||
+      view.screen === "rule" ||
+      view.screen === "command" ||
+      view.screen === "workflow");
 
   return (
     <div className="app">
@@ -1026,6 +1265,11 @@ export function App() {
             onSelectCommands={() => {
               if (supportsCommands(view.tool)) {
                 navigate({ screen: "commands", mode: view.mode, tool: view.tool });
+              }
+            }}
+            onSelectWorkflows={() => {
+              if (supportsWorkflows(view.tool)) {
+                navigate({ screen: "workflows", mode: view.mode, tool: view.tool });
               }
             }}
           />
@@ -1207,6 +1451,71 @@ export function App() {
                   tool: commandDraft.tool,
                   scope: commandDraft.scope,
                   id: commandDraft.id,
+                },
+                targets,
+                overwrite,
+              });
+              pushToast("success", "Import finished");
+              if (currentMode) await refreshWorkspace(currentMode);
+              return result;
+            }}
+          />
+        )}
+
+        {view.screen === "workflows" && workspace && (
+          <WorkflowsListView
+            key={`workflows:${view.mode}:${view.tool}`}
+            mode={view.mode}
+            tool={view.tool}
+            workflows={workflows}
+            workspace={workspace}
+            projectRootSet={projectRootSet}
+            busy={busy}
+            onBulkDelete={handleBulkDeleteWorkflows}
+            onBulkPreview={handleBulkPreviewWorkflows}
+            onBulkImport={handleBulkImportWorkflows}
+            onOpen={(workflow) =>
+              navigate({
+                screen: "workflow",
+                mode: view.mode,
+                tool: view.tool,
+                id: workflow.id,
+                path: workflow.filePath,
+              })
+            }
+            onCreate={handleCreateWorkflow}
+          />
+        )}
+
+        {view.screen === "workflow" && workflowDraft && workspace && (
+          <WorkflowDetailView
+            mode={view.mode}
+            tool={view.tool}
+            workflow={workflowDraft}
+            workspace={workspace}
+            projectRootSet={projectRootSet}
+            busy={busy}
+            dirty={dirty}
+            onChangeContents={(contents) => setWorkflowDraft({ ...workflowDraft, contents })}
+            onSave={handleSaveWorkflow}
+            onDelete={handleDeleteWorkflow}
+            onPreviewImport={(targets, overwrite) =>
+              api.previewWorkflowImport(effectiveRoot, {
+                source: {
+                  tool: workflowDraft.tool,
+                  scope: workflowDraft.scope,
+                  id: workflowDraft.id,
+                },
+                targets,
+                overwrite,
+              })
+            }
+            onImport={async (targets, overwrite) => {
+              const result = await api.importWorkflow(effectiveRoot, {
+                source: {
+                  tool: workflowDraft.tool,
+                  scope: workflowDraft.scope,
+                  id: workflowDraft.id,
                 },
                 targets,
                 overwrite,

@@ -73,6 +73,12 @@ Or run the pieces separately: `npm run dev:server` (API on `http://127.0.0.1:878
 | OpenCode | `.opencode/commands/<id>.md` | `~/.config/opencode/commands/` |
 | Antigravity | `.agents/workflows/<id>.md` | `$ANTIGRAVITY_HOME/workflows/` |
 
+## Native Claude workflow paths
+
+| Tool | Project | Global | File |
+|------|---------|--------|------|
+| Claude Code | `.claude/workflows/<id>.js` | `~/.claude/workflows/` | dynamic workflow script (`export const meta`) |
+
 ## API
 
 | Method | Path | Purpose |
@@ -93,6 +99,11 @@ Or run the pieces separately: `npm run dev:server` (API on `http://127.0.0.1:878
 | POST | `/api/commands` | Create command |
 | POST | `/api/commands/scaffold` | Scaffold (+ save) |
 | POST | `/api/commands/import` | Copy across command tools/scopes (`dryRun` previews) |
+| GET | `/api/workflows?tool=&scope=` | List Claude dynamic workflows |
+| GET/PUT/DELETE | `/api/workflows/:tool/:id?scope=&path=` | Read / update / delete workflow script |
+| POST | `/api/workflows` | Create workflow |
+| POST | `/api/workflows/scaffold` | Scaffold (+ save) |
+| POST | `/api/workflows/import` | Copy across scopes (`dryRun` previews) |
 | POST | `/api/pick-folder` | Native OS folder picker for project root |
 
 Writes into read-only vendor dirs are rejected with `403`.

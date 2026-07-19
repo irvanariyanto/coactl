@@ -6,3 +6,5 @@ export * from "./rule-paths.js";
 export * from "./rules.js";
 export * from "./command-paths.js";
 export * from "./commands.js";
+export * from "./workflow-paths.js";
+export * from "./workflows.js";

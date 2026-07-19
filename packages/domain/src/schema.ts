@@ -94,3 +94,24 @@ export interface CommandRecord {
   kind: "command" | "workflow";
   readOnly: boolean;
 }
+
+/**
+ * Tools with Claude-style dynamic workflow scripts (JS orchestration).
+ * Antigravity markdown workflows stay under Commands.
+ */
+export const WORKFLOW_TOOLS = ["claude-code"] as const;
+export type WorkflowTool = (typeof WORKFLOW_TOOLS)[number];
+
+export interface WorkflowRecord {
+  id: string;
+  tool: WorkflowTool;
+  scope: ScopeMode;
+  name: string;
+  description: string;
+  filePath: string;
+  contents: string;
+  /** Script body without the leading meta export (best-effort). */
+  body: string;
+  extension: "js";
+  readOnly: boolean;
+}
