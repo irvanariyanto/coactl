@@ -178,7 +178,7 @@ Skill id: kebab-case (`^[a-z0-9]+(-[a-z0-9]+)*$`).
 - List **one row per physical path** (marked with a `duplicate` badge)
 - Editing opens the specific `filePath` the user selected (`path` query param on read/update/delete)
 - New creates always go to the **preferred writable** candidate
-- Codex project preferred write target: `.agents/skills` (Agent Skills convention); `.codex/skills` remains a scan candidate
+- Codex project preferred write target: `.agents/skills` (official Agent Skills / Codex docs); `.codex/skills` remains a legacy scan candidate
 
 **Read-only locations:**
 
@@ -210,7 +210,7 @@ Paths are resolved at runtime; this table documents intended sources of truth.
 |------|--------------------|-------------------|
 | Claude Code | `<root>/.claude/skills` | `~/.claude/skills` |
 | Cursor | `<root>/.cursor/skills`, `…/skills-cursor` (**RO**) | `~/.cursor/skills`, `~/.cursor/skills-cursor` (**RO**) |
-| Codex | `<root>/.agents/skills` (preferred write), `<root>/.codex/skills` | `$CODEX_HOME/skills`, `~/.codex/skills`, `~/.agents/skills` |
+| Codex | `<root>/.agents/skills` (preferred write), `<root>/.codex/skills` (legacy) | `$CODEX_HOME/skills`, `~/.codex/skills`, `~/.agents/skills` |
 | Zed | `<root>/.agents/skills` | `$ZED_HOME/skills`, `~/.agents/skills` |
 | Gemini | `<root>/.gemini/skills` | `$GEMINI_HOME/skills` |
 | OpenCode | `<root>/.opencode/skills` | `$OPENCODE_HOME/skills`, `~/.opencode/skills`, `~/.config/opencode/skills` |
@@ -353,7 +353,7 @@ Legacy CLI capabilities (lockfile, drift sync from `.coactl`) remain archived un
 | Question | Decision |
 |----------|----------|
 | Cursor `skills-cursor` writability? | **Read-only** — list & import-from yes; write / import-to no |
-| Codex project: `.agents/skills` vs `.codex/skills`? | **Preferred write:** `.agents/skills`. Both scanned. Duplicates listed separately by path |
+| Codex project: `.agents/skills` vs `.codex/skills`? | **Preferred write:** `.agents/skills` (official). `.codex/skills` scanned as legacy. Duplicates listed separately by path |
 | Global mode: show project paths before root is set? | **No for import destinations** until project root is set (A2). Tools/resources in Global mode focus on global paths |
 
 ---

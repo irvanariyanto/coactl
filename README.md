@@ -47,7 +47,7 @@ Or run the pieces separately: `npm run dev:server` (API on `http://127.0.0.1:878
 |------|---------|-----------------------------------|
 | Claude Code | `.claude/skills/` | `~/.claude/skills/` |
 | Cursor | `.cursor/skills/` (+ `skills-cursor`) | `~/.cursor/skills/` (+ `skills-cursor`) |
-| Codex | `.agents/skills/` (+ `.codex/skills`) | `$CODEX_HOME/skills` or `~/.codex/skills` |
+| Codex | `.agents/skills/` (+ `.codex/skills` legacy) | `$CODEX_HOME/skills` or `~/.codex/skills` |
 | Zed | `.agents/skills/` | `$ZED_HOME/skills` or `~/.config/zed/skills` |
 | Gemini | `.gemini/skills/` | `$GEMINI_HOME/skills` or `~/.gemini/skills` |
 | OpenCode | `.opencode/skills/` | `~/.opencode/skills` or `~/.config/opencode/skills` |

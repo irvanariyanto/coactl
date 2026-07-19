@@ -80,7 +80,7 @@ export function skillPathCandidates(
           join(root, ".cursor", "skills-cursor"),
         ]);
       case "codex":
-        // Agent Skills standard in-repo; some setups also use .codex/skills
+        // Official Codex / Agent Skills: .agents/skills preferred; .codex/skills kept for legacy.
         return unique([join(root, ".agents", "skills"), join(root, ".codex", "skills")]);
       case "zed":
         return unique([join(root, ".agents", "skills")]);
