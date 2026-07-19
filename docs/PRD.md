@@ -1,8 +1,8 @@
 # coactl — Product Requirements Document (PRD)
 
-**Version:** 0.2.1 (as-built, Phase A shipped)  
+**Version:** 0.2.1 (as-built, Phase A–B shipped; Phase C #2 shipped)  
 **Status:** Living document — as-built product plus agreed next priorities  
-**Last updated:** 2026-07-18  
+**Last updated:** 2026-07-19  
 **Related:** [README.md](../README.md) · Legacy CLI frozen at tag `cli-v0.1.0` / branch `archive/cli-v0.1`
 
 ---
@@ -396,7 +396,7 @@ Exit criteria met: skills feel trustworthy for daily Global ↔ Project / cross-
 ### Phase C — Nice-to-have
 
 1. Deep links / router — **shipped** (URL hash; Resources hub for rule-capable tools)  
-2. Richer diff UI for import overwrite — **partial** (unified View diff on single + bulk overwrite; side-by-side still optional)  
+2. Richer diff UI for import overwrite — **shipped** (preview summary counts; unified + side-by-side View diff; identical badge)  
 3. Optional revival of legacy remote sources **only** if they still write native dirs (no `.coactl` registry)
 
 Legacy CLI capabilities (lockfile, drift sync from `.coactl`) remain archived unless explicitly revived under native-first constraints.

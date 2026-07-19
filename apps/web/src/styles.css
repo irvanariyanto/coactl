@@ -1050,9 +1050,44 @@ tbody tr.row-link:hover {
 .diff-head {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.5rem;
   padding: 0.5rem 0.9rem;
   border-bottom: 1px solid var(--border);
+}
+
+.diff-mode {
+  display: inline-flex;
+  gap: 0.15rem;
+  margin-left: auto;
+  padding: 0.15rem;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.diff-mode-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0.22rem 0.55rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 550;
+  box-shadow: none;
+}
+
+.diff-mode-btn:hover:not(.active) {
+  color: var(--text);
+  background: var(--surface-2);
+  border-color: transparent;
+}
+
+.diff-mode-btn.active {
+  background: var(--surface-3);
+  color: var(--text);
+  border-color: transparent;
+  box-shadow: var(--shadow-1);
 }
 
 .diff-body {
@@ -1083,6 +1118,94 @@ tbody tr.row-link:hover {
 
 .diff-line.ctx {
   color: var(--text-muted);
+}
+
+.diff-split {
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+}
+
+.diff-split-head {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.diff-split-head > div {
+  padding: 0.35rem 0.75rem;
+  background: var(--surface-1);
+}
+
+.diff-split-body {
+  overflow: auto;
+  background: var(--border);
+}
+
+.diff-split-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  min-height: 1.5em;
+}
+
+.diff-split-cell {
+  margin: 0;
+  padding: 0.1rem 0.75rem;
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  min-height: 1.5em;
+}
+
+.diff-split-cell.del {
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface-2));
+  color: var(--danger);
+}
+
+.diff-split-cell.add {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
+  color: var(--accent-strong);
+}
+
+.diff-split-cell.ctx {
+  color: var(--text-muted);
+}
+
+.diff-split-cell.empty {
+  background: color-mix(in srgb, var(--surface-1) 70%, transparent);
+}
+
+.import-plan-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.65rem;
+}
+
+.import-plan-hint {
+  font-size: 0.8rem;
+}
+
+@media (max-width: 720px) {
+  .diff-split-head,
+  .diff-split-row {
+    grid-template-columns: 1fr;
+  }
+
+  .diff-mode {
+    margin-left: 0;
+    width: 100%;
+  }
 }
 
 .dest-row {

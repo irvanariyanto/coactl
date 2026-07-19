@@ -84,6 +84,21 @@ export function ImportPanel({
   }
 
   const colCount = showSkillColumn ? 4 : 3;
+  const planSummary = plan
+    ? {
+        write: plan.filter((p) => p.action === "write").length,
+        overwrite: plan.filter((p) => p.action === "overwrite").length,
+        skip: plan.filter((p) => p.action === "skip").length,
+        error: plan.filter((p) => p.action === "error").length,
+        identical: plan.filter(
+          (p) =>
+            p.action === "overwrite" &&
+            p.existingContents !== undefined &&
+            incomingById[p.id] !== undefined &&
+            p.existingContents === incomingById[p.id],
+        ).length,
+      }
+    : null;
 
   return (
     <div className="import-panel">
@@ -144,72 +159,97 @@ export function ImportPanel({
         </div>
       </div>
 
-      {plan && (
-        <div className="table-wrap" style={{ marginTop: "0.9rem" }}>
-          <table>
-            <thead>
-              <tr>
-                {showSkillColumn && <th>Skill</th>}
-                <th>Target</th>
-                <th>Action</th>
-                <th>Path</th>
-              </tr>
-            </thead>
-            <tbody>
-              {plan.map((p) => {
-                const key = `${p.id}:${p.tool}:${p.scope}`;
-                const canDiff = p.action === "overwrite" && p.existingContents !== undefined;
-                const incoming = incomingById[p.id];
-                const diffOpen = diffKey === key;
-                return [
-                  <tr key={key}>
-                    {showSkillColumn && (
+      {plan && planSummary && (
+        <div className="import-plan" style={{ marginTop: "0.9rem" }}>
+          <div className="import-plan-summary" aria-live="polite">
+            <span className="badge clean">{planSummary.write} write</span>
+            <span className="badge warn">{planSummary.overwrite} overwrite</span>
+            {planSummary.identical > 0 && (
+              <span className="badge">{planSummary.identical} identical</span>
+            )}
+            <span className="badge">{planSummary.skip} skip</span>
+            {planSummary.error > 0 && (
+              <span className="badge danger">{planSummary.error} error</span>
+            )}
+            {planSummary.overwrite > 0 && (
+              <span className="muted import-plan-hint">
+                Open View diff on overwrite rows to compare Current vs Incoming.
+              </span>
+            )}
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  {showSkillColumn && <th>Skill</th>}
+                  <th>Target</th>
+                  <th>Action</th>
+                  <th>Path</th>
+                </tr>
+              </thead>
+              <tbody>
+                {plan.map((p) => {
+                  const key = `${p.id}:${p.tool}:${p.scope}`;
+                  const canDiff = p.action === "overwrite" && p.existingContents !== undefined;
+                  const incoming = incomingById[p.id];
+                  const identical =
+                    canDiff && incoming !== undefined && p.existingContents === incoming;
+                  const diffOpen = diffKey === key;
+                  return [
+                    <tr key={key}>
+                      {showSkillColumn && (
+                        <td>
+                          <strong>{p.id}</strong>
+                        </td>
+                      )}
                       <td>
-                        <strong>{p.id}</strong>
-                      </td>
-                    )}
-                    <td>
-                      {toolLabel(p.tool)}
-                      <span className={`badge scope-${p.scope}`} style={{ marginLeft: 6 }}>
-                        {p.scope}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`badge ${actionTone(p.action)}`}>{p.action}</span>
-                      {p.reason && (
-                        <span className="muted" style={{ display: "block", fontSize: "0.78rem" }}>
-                          {p.reason}
+                        {toolLabel(p.tool)}
+                        <span className={`badge scope-${p.scope}`} style={{ marginLeft: 6 }}>
+                          {p.scope}
                         </span>
-                      )}
-                      {canDiff && incoming !== undefined && (
-                        <button
-                          type="button"
-                          className="ghost"
-                          style={{ marginLeft: 8, padding: "0.1rem 0.5rem", fontSize: "0.78rem" }}
-                          onClick={() => setDiffKey(diffOpen ? null : key)}
-                        >
-                          {diffOpen ? "Hide diff" : "View diff"}
-                        </button>
-                      )}
-                    </td>
-                    <td>
-                      <code className="path-line" title={p.filePath}>
-                        {p.filePath}
-                        {p.exists ? " (exists)" : ""}
-                      </code>
-                    </td>
-                  </tr>,
-                  canDiff && diffOpen && incoming !== undefined && (
-                    <tr key={`${key}:diff`}>
-                      <td colSpan={colCount} style={{ padding: 0 }}>
-                        <ContentsDiff current={p.existingContents!} incoming={incoming} />
                       </td>
-                    </tr>
-                  ),
-                ];
-              })}
-            </tbody>
-          </table>
+                      <td>
+                        <span className={`badge ${actionTone(p.action)}`}>{p.action}</span>
+                        {identical && (
+                          <span className="badge" style={{ marginLeft: 6 }}>
+                            identical
+                          </span>
+                        )}
+                        {p.reason && (
+                          <span className="muted" style={{ display: "block", fontSize: "0.78rem" }}>
+                            {p.reason}
+                          </span>
+                        )}
+                        {canDiff && incoming !== undefined && (
+                          <button
+                            type="button"
+                            className="ghost"
+                            style={{ marginLeft: 8, padding: "0.1rem 0.5rem", fontSize: "0.78rem" }}
+                            onClick={() => setDiffKey(diffOpen ? null : key)}
+                          >
+                            {diffOpen ? "Hide diff" : "View diff"}
+                          </button>
+                        )}
+                      </td>
+                      <td>
+                        <code className="path-line" title={p.filePath}>
+                          {p.filePath}
+                          {p.exists ? " (exists)" : ""}
+                        </code>
+                      </td>
+                    </tr>,
+                    canDiff && diffOpen && incoming !== undefined && (
+                      <tr key={`${key}:diff`}>
+                        <td colSpan={colCount} style={{ padding: 0 }}>
+                          <ContentsDiff current={p.existingContents!} incoming={incoming} />
+                        </td>
+                      </tr>
+                    ),
+                  ];
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
