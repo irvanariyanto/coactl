@@ -3,6 +3,7 @@ import type {
   GitSkillsInstallPlan,
   GitSkillsInstallResult,
   GitSkillsPreview,
+  PackSkillsPreview,
   RemoteSkillCandidate,
   ScopeMode,
   SkillTool,
@@ -19,6 +20,12 @@ interface Props {
     branch?: string;
     subpath?: string;
   }) => Promise<GitSkillsPreview>;
+  onPreviewPack: (
+    input:
+      | { kind: "npm"; install: string; registry?: string; subpath?: string }
+      | { kind: "archive"; path?: string; url?: string; subpath?: string },
+  ) => Promise<PackSkillsPreview>;
+  onPickArchive: () => Promise<{ path: string } | { cancelled: true }>;
   onPreviewInstall: (
     skills: Array<{ id: string; contents: string }>,
     overwrite: boolean,
@@ -34,10 +41,17 @@ export function GitInstallPanel({
   scope,
   busy,
   onPreviewRepo,
+  onPreviewPack,
+  onPickArchive,
   onPreviewInstall,
   onInstall,
 }: Props) {
   const [url, setUrl] = useState("");
+  const [sourceTab, setSourceTab] = useState<"git" | "pack">("git");
+  const [packKind, setPackKind] = useState<"npm" | "archive">("npm");
+  const [npmInstall, setNpmInstall] = useState("");
+  const [registry, setRegistry] = useState("");
+  const [archiveSource, setArchiveSource] = useState("");
   const [branch, setBranch] = useState("");
   const [subpath, setSubpath] = useState("");
   const [overwrite, setOverwrite] = useState(false);
@@ -56,22 +70,40 @@ export function GitInstallPanel({
       .map((s) => ({ id: s.id, contents: s.contents }));
   }
 
-  async function scanRepo() {
+  async function scanSource() {
     setWorking(true);
     setError(null);
     setPlan(null);
     setResults(null);
     setDiffKey(null);
     try {
-      const preview = await onPreviewRepo({
-        url: url.trim(),
-        branch: branch.trim() || undefined,
-        subpath: subpath.trim() || undefined,
-      });
+      const preview =
+        sourceTab === "git"
+          ? await onPreviewRepo({
+              url: url.trim(),
+              branch: branch.trim() || undefined,
+              subpath: subpath.trim() || undefined,
+            })
+          : await onPreviewPack(
+              packKind === "npm"
+                ? {
+                    kind: "npm",
+                    install: npmInstall.trim(),
+                    registry: registry.trim() || undefined,
+                    subpath: subpath.trim() || undefined,
+                  }
+                : {
+                    kind: "archive",
+                    ...(/^[a-z][a-z0-9+.-]*:\/\//i.test(archiveSource.trim())
+                      ? { url: archiveSource.trim() }
+                      : { path: archiveSource.trim() }),
+                    subpath: subpath.trim() || undefined,
+                  },
+            );
       setCandidates(preview.skills);
       setSelected(new Set(preview.skills.map((s) => s.repoPath)));
       if (preview.skills.length === 0) {
-        setError("No SKILL.md files found in that repo (try a subpath like skills/).");
+        setError("No SKILL.md files found in that source (try a subpath like skills/).");
       }
     } catch (err) {
       setCandidates(null);
@@ -118,29 +150,101 @@ export function GitInstallPanel({
 
   return (
     <div className="git-install-panel">
+      <div className="actions" style={{ marginBottom: "0.7rem" }}>
+        <button
+          type="button"
+          className={sourceTab === "git" ? "primary" : undefined}
+          disabled={disabled}
+          onClick={() => {
+            setSourceTab("git");
+            setCandidates(null);
+            setError(null);
+          }}
+        >
+          Git
+        </button>
+        <button
+          type="button"
+          className={sourceTab === "pack" ? "primary" : undefined}
+          disabled={disabled}
+          onClick={() => {
+            setSourceTab("pack");
+            setCandidates(null);
+            setError(null);
+          }}
+        >
+          Pack
+        </button>
+      </div>
       <p className="panel-sub" style={{ marginBottom: "0.6rem" }}>
-        Shallow-clone a public git repo, find <code>SKILL.md</code> folders, and write selected
-        skills into {toolLabel(tool)} ({scope}).
+        {sourceTab === "git"
+          ? "Shallow-clone a public git repo"
+          : "Extract an npm package or local/HTTPS archive"}
+        , find <code>SKILL.md</code> folders, and write selected skills into {toolLabel(tool)} (
+        {scope}).
       </p>
       <div className="git-install-fields">
-        <label className="field" style={{ flex: 2, minWidth: 240 }}>
-          <span>Git URL</span>
-          <input
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://github.com/org/skills-repo"
-            disabled={disabled}
-          />
-        </label>
-        <label className="field" style={{ flex: 1, minWidth: 120 }}>
-          <span>Branch (optional)</span>
-          <input
-            value={branch}
-            onChange={(e) => setBranch(e.target.value)}
-            placeholder="main"
-            disabled={disabled}
-          />
-        </label>
+        {sourceTab === "git" ? (
+          <>
+            <label className="field" style={{ flex: 2, minWidth: 240 }}>
+              <span>Git URL</span>
+              <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://github.com/org/skills-repo" disabled={disabled} />
+            </label>
+            <label className="field" style={{ flex: 1, minWidth: 120 }}>
+              <span>Branch (optional)</span>
+              <input value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="main" disabled={disabled} />
+            </label>
+          </>
+        ) : (
+          <>
+            <div className="field" style={{ minWidth: 150 }}>
+              <span>Pack type</span>
+              <div className="actions">
+                <button type="button" className={packKind === "npm" ? "primary" : undefined} disabled={disabled} onClick={() => setPackKind("npm")}>npm</button>
+                <button type="button" className={packKind === "archive" ? "primary" : undefined} disabled={disabled} onClick={() => setPackKind("archive")}>archive</button>
+              </div>
+            </div>
+            {packKind === "npm" ? (
+              <>
+                <label className="field" style={{ flex: 2, minWidth: 220 }}>
+                  <span>Package</span>
+                  <input value={npmInstall} onChange={(e) => setNpmInstall(e.target.value)} placeholder="@scope/name@version" disabled={disabled} />
+                </label>
+                <label className="field" style={{ flex: 1, minWidth: 190 }}>
+                  <span>Registry (optional)</span>
+                  <input value={registry} onChange={(e) => setRegistry(e.target.value)} placeholder="https://registry.npmjs.org" disabled={disabled} />
+                </label>
+              </>
+            ) : (
+              <label className="field" style={{ flex: 2, minWidth: 280 }}>
+                <span>Local path or HTTPS URL</span>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    value={archiveSource}
+                    onChange={(e) => setArchiveSource(e.target.value)}
+                    placeholder="/path/to/skills.zip or https://…/skills.tgz"
+                    disabled={disabled}
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => {
+                      setError(null);
+                      void onPickArchive()
+                        .then((result) => {
+                          if ("path" in result) setArchiveSource(result.path);
+                        })
+                        .catch((err: Error) => setError(err.message));
+                    }}
+                  >
+                    Browse…
+                  </button>
+                </div>
+              </label>
+            )}
+          </>
+        )}
         <label className="field" style={{ flex: 1, minWidth: 140 }}>
           <span>Subpath (optional)</span>
           <input
@@ -155,10 +259,10 @@ export function GitInstallPanel({
         <button
           className="primary"
           type="button"
-          disabled={disabled || !url.trim()}
-          onClick={() => void scanRepo()}
+          disabled={disabled || (sourceTab === "git" ? !url.trim() : packKind === "npm" ? !npmInstall.trim() : !archiveSource.trim())}
+          onClick={() => void scanSource()}
         >
-          {working && !candidates ? "Scanning…" : "Scan repo"}
+          {working && !candidates ? "Scanning…" : "Scan source"}
         </button>
       </div>
       {error && <p className="form-error">{error}</p>}

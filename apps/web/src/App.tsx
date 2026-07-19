@@ -1628,6 +1628,8 @@ export function App() {
             onBulkPreview={handleBulkPreview}
             onBulkImport={handleBulkImport}
             onPreviewGitRepo={(input) => api.previewGitSkills(effectiveRoot, input)}
+            onPreviewPack={(input) => api.previewPackSkills(effectiveRoot, input)}
+            onPickArchive={() => api.pickArchive()}
             onPreviewGitInstall={async (skillsToInstall, overwrite) => {
               const res = await api.previewGitInstall(effectiveRoot, {
                 tool: view.tool,

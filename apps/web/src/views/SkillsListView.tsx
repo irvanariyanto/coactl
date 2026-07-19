@@ -5,6 +5,7 @@ import type {
   GitSkillsPreview,
   ImportPlan,
   ImportResult,
+  PackSkillsPreview,
   ScopeMode,
   Skill,
   Workspace,
@@ -42,6 +43,12 @@ interface Props {
     branch?: string;
     subpath?: string;
   }) => Promise<GitSkillsPreview>;
+  onPreviewPack: (
+    input:
+      | { kind: "npm"; install: string; registry?: string; subpath?: string }
+      | { kind: "archive"; path?: string; url?: string; subpath?: string },
+  ) => Promise<PackSkillsPreview>;
+  onPickArchive: () => Promise<{ path: string } | { cancelled: true }>;
   onPreviewGitInstall: (
     skills: Array<{ id: string; contents: string }>,
     overwrite: boolean,
@@ -67,6 +74,8 @@ export function SkillsListView({
   onBulkPreview,
   onBulkImport,
   onPreviewGitRepo,
+  onPreviewPack,
+  onPickArchive,
   onPreviewGitInstall,
   onInstallGitSkills,
 }: Props) {
@@ -199,7 +208,7 @@ export function SkillsListView({
               setCreating(false);
             }}
           >
-            {fromGit ? "Hide git install" : "Install from Git…"}
+            {fromGit ? "Hide remote install" : "Install remote…"}
           </button>
           {!creating && (
             <button
@@ -221,7 +230,7 @@ export function SkillsListView({
       {fromGit && (
         <div className="create-panel">
           <div className="create-panel-head">
-            <strong>Install from Git</strong>
+            <strong>Install remote skills</strong>
             <span className="muted" style={{ fontSize: "0.82rem" }}>
               Target: {toolLabel(tool)} · {mode} (
               <code>
@@ -235,6 +244,8 @@ export function SkillsListView({
             scope={modeToScope(mode)}
             busy={busy}
             onPreviewRepo={onPreviewGitRepo}
+            onPreviewPack={onPreviewPack}
+            onPickArchive={onPickArchive}
             onPreviewInstall={onPreviewGitInstall}
             onInstall={async (skills, overwrite) => {
               const results = await onInstallGitSkills(skills, overwrite);

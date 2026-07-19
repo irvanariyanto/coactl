@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { app } from "./app.js";
+import { app, normalizePickedArchivePath } from "./app.js";
 
 const temps: string[] = [];
 const fixtureRoot = join(dirname(fileURLToPath(import.meta.url)), "..", ".test-tmp");
@@ -93,6 +93,43 @@ describe("api basics", () => {
     expect(body.rulePathsByTool.cursor.project.preferred).toContain(join(".cursor", "rules"));
     expect(body.rulePathsByTool.codex.project.preferred).toContain("AGENTS.md");
     expect(body.toolRuleCounts.cursor.project).toBe(0);
+  });
+});
+
+describe("archive picker", () => {
+  it("accepts supported archive extensions case-insensitively", () => {
+    expect(normalizePickedArchivePath("/tmp/skills.zip")).toBe("/tmp/skills.zip");
+    expect(normalizePickedArchivePath("/tmp/skills.TGZ")).toBe("/tmp/skills.TGZ");
+    expect(normalizePickedArchivePath("/tmp/skills.tar.gz")).toBe("/tmp/skills.tar.gz");
+  });
+
+  it("rejects non-archive selections", () => {
+    expect(() => normalizePickedArchivePath("/tmp/skills.txt")).toThrow(".zip, .tgz, or .tar.gz");
+  });
+});
+
+describe("remote pack preview", () => {
+  it("rejects mismatched and incomplete pack sources", async () => {
+    for (const body of [
+      { kind: "npm", url: "https://example.com/skills.tgz" },
+      { kind: "archive", path: "/tmp/a.zip", url: "https://example.com/a.zip" },
+      { kind: "unknown", install: "skills" },
+    ]) {
+      const res = await app.request("/api/skills/remote/pack/preview", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it("returns a clear validation error for unsafe npm specs", async () => {
+    const res = await app.request("/api/skills/remote/pack/preview", {
+      method: "POST",
+      body: JSON.stringify({ kind: "npm", install: "pkg;whoami" }),
+    });
+    expect(res.status).toBe(400);
+    expect((await json(res)).error).toContain("package name");
   });
 });
 

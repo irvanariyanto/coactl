@@ -43,7 +43,7 @@ Developers use multiple AI coding assistants (Claude Code, Cursor, Codex, Gemini
 ### Non-goals (current release / near-term)
 
 - Central registry / `.coactl` canonical store
-- npm/zip remote packs from the legacy CLI (public git URL install is available)
+- Legacy CLI `assets/` + `asset.yaml` packs and multi-kind packs (native `SKILL.md` npm/zip packs are supported)
 - Multi-user SaaS / cloud accounts
 - Private git auth for remote skill install
 

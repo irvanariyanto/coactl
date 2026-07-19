@@ -26,6 +26,12 @@ with a dry-run preview (write / skip / overwrite per target) before anything is 
 **Install from Git** on a Skills list shallow-clones a public repo, finds `SKILL.md` folders
 (`skills/`, `.claude/skills/`, …), previews targets, and writes into the current tool’s native dir.
 
+The same remote installer also accepts native skill packs from an **npm package** (using
+`npm pack`, never `npm install`) or a local/HTTPS **`.zip`, `.tgz`, or `.tar.gz` archive**.
+Choose the Pack tab, preview the discovered skills, then use the same overwrite and diff flow.
+For local archives, use Browse to select the file with the native OS picker or enter its path.
+Legacy CLI `assets/` + `asset.yaml` packs are not mapped; only `SKILL.md` trees are discovered.
+
 Safety rules:
 
 - Vendor-managed trees (Cursor `skills-cursor`) are **read-only**: listed and importable-from,
@@ -51,13 +57,28 @@ one-way **scrypt hash** to `~/.coactl/auth.json` (mode `600`). No `.env` passwor
 When enabled, the UI shows an Unlock screen and all `/api/*` routes (except health / auth) require
 a session cookie.
 
-For a VPS, enable login first, then bind beyond localhost:
+## Production API and UI
+
+Build all workspaces, then start the production API:
 
 ```bash
-COACTL_HOST=0.0.0.0 COACTL_PORT=8787 npm run start -w @coactl/server
+npm run build
+npm run start
 ```
 
-Prefer HTTPS via a reverse proxy. Put the process behind a locked-down OS user.
+The root `start` command rebuilds the domain and server before starting the API. It does not serve
+`apps/web/dist`: host the built web directory separately (or run `npm run dev:web` / the web
+preview command for non-production use) and proxy `/api` to the API.
+
+For a VPS, enable login while bound to localhost first, then re-bind beyond localhost:
+
+```bash
+COACTL_HOST=0.0.0.0 COACTL_PORT=8787 npm run start
+```
+
+The defaults are `COACTL_HOST=127.0.0.1` and `COACTL_PORT=8787`. Prefer HTTPS via a reverse
+proxy, keep the API and static UI on the same trusted origin, and run the process as a locked-down
+OS user.
 
 ## Native skill paths
 
@@ -109,6 +130,7 @@ Prefer HTTPS via a reverse proxy. Put the process behind a locked-down OS user.
 | POST | `/api/skills/scaffold` | Scaffold (+ save) |
 | POST | `/api/skills/import` | Copy to other tools/scopes (`dryRun: true` previews) |
 | POST | `/api/skills/remote/git/preview` | Shallow-clone URL and list `SKILL.md` candidates |
+| POST | `/api/skills/remote/pack/preview` | Pack/download npm or archive source and list `SKILL.md` candidates |
 | POST | `/api/skills/remote/git/install` | Write selected remote skills (`dryRun` previews) |
 | GET | `/api/rules?tool=&scope=` | List rules / instruction files |
 | GET/PUT/DELETE | `/api/rules/:tool/:id?scope=&path=` | Read / update / delete rule file |

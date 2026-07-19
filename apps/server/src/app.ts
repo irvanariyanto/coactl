@@ -34,7 +34,9 @@ import {
   planImportSkill,
   planImportWorkflow,
   planInstallRemoteSkills,
+  previewSkillsFromArchive,
   previewSkillsFromGit,
+  previewSkillsFromNpm,
   resolveAllCommandPaths,
   resolveAllRulePaths,
   resolveAllSkillPaths,
@@ -77,6 +79,14 @@ type Variables = {
 };
 
 export const app = new Hono<{ Variables: Variables }>();
+
+export function normalizePickedArchivePath(path: string): string {
+  const resolved = resolve(path.trim());
+  if (!/\.(?:zip|tgz|tar\.gz)$/i.test(resolved)) {
+    throw new Error("Select a .zip, .tgz, or .tar.gz archive");
+  }
+  return resolved;
+}
 
 app.use(
   "*",
@@ -546,6 +556,43 @@ app.post("/api/skills/remote/git/preview", async (c) => {
     return c.json(preview);
   } catch (err) {
     return c.json({ error: (err as Error).message }, 400);
+  }
+});
+
+app.post("/api/skills/remote/pack/preview", async (c) => {
+  const body = z
+    .discriminatedUnion("kind", [
+      z.object({
+        kind: z.literal("npm"),
+        install: z.string().min(1),
+        registry: z.string().optional(),
+        subpath: z.string().optional(),
+      }),
+      z.object({
+        kind: z.literal("archive"),
+        path: z.string().optional(),
+        url: z.string().optional(),
+        subpath: z.string().optional(),
+      }),
+    ])
+    .safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: "A valid npm or archive pack source is required" }, 400);
+  try {
+    if (body.data.kind === "npm") {
+      const preview = await previewSkillsFromNpm(body.data);
+      return c.json({
+        kind: "npm" as const,
+        source: preview.install,
+        subpath: preview.subpath,
+        skills: preview.skills,
+      });
+    }
+    const preview = await previewSkillsFromArchive(body.data);
+    return c.json({ kind: "archive" as const, ...preview });
+  } catch (err) {
+    const message = (err as Error).message;
+    const invalid = /required|provide exactly|must (?:be|use|stay)|not found|not a regular file/i.test(message);
+    return c.json({ error: message }, invalid ? 400 : 502);
   }
 });
 
@@ -1227,6 +1274,64 @@ app.post("/api/pick-folder", async (c) => {
     const result = await pick();
     if ("cancelled" in result) return c.json({ cancelled: true });
     return c.json({ path: resolve(result.path) });
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 400);
+  }
+});
+
+/** Native OS archive picker. The selected file is still validated again during preview. */
+app.post("/api/pick-archive", async (c) => {
+  const platform = process.platform;
+
+  function isUserCancel(err: Error | null, stderr: string): boolean {
+    const msg = `${err?.message ?? ""}\n${stderr}`;
+    if (/User canceled|User cancelled|-128/i.test(msg)) return true;
+    return platform === "linux" && Boolean(err && "code" in err && Number((err as { code?: string | number }).code) === 1);
+  }
+
+  const pick = (): Promise<{ path: string } | { cancelled: true }> =>
+    new Promise((resolvePick, rejectPick) => {
+      const done = (err: Error | null, stdout: string, stderr = "") => {
+        const path = stdout.trim();
+        if (path) return resolvePick({ path });
+        if (!err || isUserCancel(err, stderr)) return resolvePick({ cancelled: true });
+        return rejectPick(err);
+      };
+      if (platform === "darwin") {
+        execFile(
+          "osascript",
+          ["-e", 'POSIX path of (choose file with prompt "Select a skill archive (.zip, .tgz, or .tar.gz)")'],
+          (err, stdout, stderr) => done(err, stdout, stderr),
+        );
+      } else if (platform === "linux") {
+        execFile(
+          "zenity",
+          [
+            "--file-selection",
+            "--title=Select a skill archive",
+            "--file-filter=Skill archives | *.zip *.tgz *.tar.gz",
+          ],
+          (err, stdout, stderr) => done(err, stdout, stderr),
+        );
+      } else if (platform === "win32") {
+        execFile(
+          "powershell",
+          [
+            "-NoProfile",
+            "-Command",
+            "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.OpenFileDialog; $d.Title = 'Select a skill archive'; $d.Filter = 'Skill archives (*.zip;*.tgz;*.tar.gz)|*.zip;*.tgz;*.tar.gz'; if ($d.ShowDialog() -eq 'OK') { $d.FileName }",
+          ],
+          (err, stdout, stderr) => done(err, stdout, stderr),
+        );
+      } else {
+        rejectPick(new Error(`Archive picker not supported on ${platform}`));
+      }
+    });
+
+  try {
+    const result = await pick();
+    if ("cancelled" in result) return c.json({ cancelled: true });
+    return c.json({ path: normalizePickedArchivePath(result.path) });
   } catch (err) {
     return c.json({ error: (err as Error).message }, 400);
   }

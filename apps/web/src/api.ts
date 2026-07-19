@@ -251,6 +251,13 @@ export interface GitSkillsPreview {
   skills: RemoteSkillCandidate[];
 }
 
+export interface PackSkillsPreview {
+  kind: "npm" | "archive";
+  source: string;
+  subpath?: string;
+  skills: RemoteSkillCandidate[];
+}
+
 export interface GitSkillsInstallPlan {
   plan: Array<{
     id: string;
@@ -419,6 +426,17 @@ export const api = {
   },
   previewGitSkills(root: string, body: { url: string; branch?: string; subpath?: string }) {
     return request<GitSkillsPreview>(`/api/skills/remote/git/preview${qs(root)}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+  previewPackSkills(
+    root: string,
+    body:
+      | { kind: "npm"; install: string; registry?: string; subpath?: string }
+      | { kind: "archive"; path?: string; url?: string; subpath?: string },
+  ) {
+    return request<PackSkillsPreview>(`/api/skills/remote/pack/preview${qs(root)}`, {
       method: "POST",
       body: JSON.stringify(body),
     });
@@ -687,5 +705,8 @@ export const api = {
   },
   pickFolder() {
     return request<{ path: string } | { cancelled: true }>(`/api/pick-folder`, { method: "POST" });
+  },
+  pickArchive() {
+    return request<{ path: string } | { cancelled: true }>(`/api/pick-archive`, { method: "POST" });
   },
 };
