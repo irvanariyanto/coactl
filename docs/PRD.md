@@ -1,6 +1,7 @@
 # coactl — Product Requirements Document (PRD)
 
-**Version:** 0.3.0 (Phases A–C + UX polish shipped)  
+**Version:** 0.4.0 (remote packs, portable profiles, responsive shell, themes)
+
 **Status:** Living document — as-built product plus agreed next priorities  
 **Last updated:** 2026-07-19  
 **Related:** [README.md](../README.md) · Legacy CLI frozen at tag `cli-v0.1.0` / branch `archive/cli-v0.1`

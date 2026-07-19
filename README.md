@@ -1,6 +1,6 @@
 # coactl (web)
 
-**Version:** 0.3.0 · **Related:** [docs/PRD.md](docs/PRD.md) · Legacy CLI frozen at tag `cli-v0.1.0` / branch `archive/cli-v0.1`
+**Version:** 0.4.0 · **Related:** [docs/PRD.md](docs/PRD.md) · Legacy CLI frozen at tag `cli-v0.1.0` / branch `archive/cli-v0.1`
 
 Local web app that manages **native AI coding skills and rules** with a clear **Global vs Project** flow.
 
@@ -210,6 +210,14 @@ packages/domain/   detection, skill/rule IO, import
 ```
 
 ## Releases
+
+### 0.4.0
+
+Remote skill installation now supports npm packages, local/HTTPS archives, GitHub shorthand, and
+Skills CLI commands. Complete skill directories are installed atomically with supporting files and
+permissions preserved. This release also adds SQLite-backed portable profiles, responsive sidebar
+navigation, light/dark themes, simplified login/logout terminology, deployment polish, and a coactl
+favicon.
 
 ### 0.3.0
 

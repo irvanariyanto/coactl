@@ -118,7 +118,7 @@ app.use("/api/*", async (c, next) => {
 });
 
 app.get("/api/health", (c) =>
-  c.json({ ok: true, version: "0.3.0", focus: "skills+rules+commands+workflows" }),
+  c.json({ ok: true, version: "0.4.0", focus: "skills+rules+commands+workflows" }),
 );
 
 app.get("/api/profile", (c) => c.json(getProfileState()));
