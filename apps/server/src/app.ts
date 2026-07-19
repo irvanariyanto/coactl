@@ -987,25 +987,38 @@ app.post("/api/workflows/import", async (c) => {
 /** Native OS folder picker (A1). Works because the server runs on the user's machine. */
 app.post("/api/pick-folder", async (c) => {
   const platform = process.platform;
-  const pick = (): Promise<string> =>
+
+  function isUserCancel(err: Error | null, stderr: string): boolean {
+    const msg = `${err?.message ?? ""}\n${stderr}`;
+    // macOS osascript: User canceled. (-128)
+    if (/User canceled|User cancelled|-128/i.test(msg)) return true;
+    // zenity: exit code 1 on Cancel
+    if (platform === "linux" && err && "code" in err && (err as NodeJS.ErrnoException).code === 1) {
+      return true;
+    }
+    return false;
+  }
+
+  const pick = (): Promise<{ path: string } | { cancelled: true }> =>
     new Promise((resolvePick, rejectPick) => {
-      const done = (err: Error | null, stdout: string) => {
-        if (err) return rejectPick(err);
+      const done = (err: Error | null, stdout: string, stderr = "") => {
         const path = stdout.trim();
-        if (!path) return rejectPick(new Error("No folder selected"));
-        resolvePick(path);
+        if (path) return resolvePick({ path });
+        // Empty selection / dialog dismiss — treat as cancel, not a hard failure.
+        if (!err || isUserCancel(err, stderr)) return resolvePick({ cancelled: true });
+        return rejectPick(err);
       };
       if (platform === "darwin") {
         execFile(
           "osascript",
           ["-e", 'POSIX path of (choose folder with prompt "Select project root")'],
-          (err, stdout) => done(err, stdout),
+          (err, stdout, stderr) => done(err, stdout, stderr),
         );
       } else if (platform === "linux") {
         execFile(
           "zenity",
           ["--file-selection", "--directory", "--title=Select project root"],
-          (err, stdout) => done(err, stdout),
+          (err, stdout, stderr) => done(err, stdout, stderr),
         );
       } else if (platform === "win32") {
         execFile(
@@ -1015,7 +1028,7 @@ app.post("/api/pick-folder", async (c) => {
             "-Command",
             "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; if ($d.ShowDialog() -eq 'OK') { $d.SelectedPath }",
           ],
-          (err, stdout) => done(err, stdout),
+          (err, stdout, stderr) => done(err, stdout, stderr),
         );
       } else {
         rejectPick(new Error(`Folder picker not supported on ${platform}`));
@@ -1023,8 +1036,9 @@ app.post("/api/pick-folder", async (c) => {
     });
 
   try {
-    const path = await pick();
-    return c.json({ path: resolve(path) });
+    const result = await pick();
+    if ("cancelled" in result) return c.json({ cancelled: true });
+    return c.json({ path: resolve(result.path) });
   } catch (err) {
     return c.json({ error: (err as Error).message }, 400);
   }

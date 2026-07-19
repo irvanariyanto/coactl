@@ -415,8 +415,9 @@ export function App() {
 
   async function handlePickFolder() {
     try {
-      const { path } = await api.pickFolder();
-      selectProject(path);
+      const result = await api.pickFolder();
+      if ("cancelled" in result) return;
+      selectProject(result.path);
     } catch (err) {
       pushToast("error", (err as Error).message);
     }

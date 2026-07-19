@@ -559,6 +559,6 @@ export const api = {
     });
   },
   pickFolder() {
-    return request<{ path: string }>(`/api/pick-folder`, { method: "POST" });
+    return request<{ path: string } | { cancelled: true }>(`/api/pick-folder`, { method: "POST" });
   },
 };
