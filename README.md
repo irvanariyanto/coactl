@@ -18,6 +18,10 @@ Home → Global | Project
       → List → Detail (CRUD + import)
 ```
 
+The persistent sidebar provides direct access to scopes, recent projects, the current tool's
+resource kinds, Portable Profile, and Login & Security. On smaller screens it becomes an
+accessible drawer; existing hash URLs and breadcrumbs remain unchanged.
+
 | Mode | Entry | Tools shown | Managed |
 |------|-------|-------------|---------|
 | **Global** | One click | Installed on the machine | `~/…/skills`, `~/…/rules` |

@@ -19,6 +19,8 @@ export type ResourceKind = "skills" | "rules" | "commands" | "workflows";
 
 export type View =
   | { screen: "mode" }
+  | { screen: "profile" }
+  | { screen: "security" }
   | { screen: "project-gate" }
   | { screen: "tools"; mode: Mode }
   | { screen: "resources"; mode: Mode; tool: SkillTool }
@@ -122,6 +124,10 @@ export function viewToHash(view: View): string {
   switch (view.screen) {
     case "mode":
       return "#/";
+    case "profile":
+      return "#/profile";
+    case "security":
+      return "#/security";
     case "project-gate":
       return "#/project-setup";
     case "tools":
@@ -160,6 +166,8 @@ export function parseHash(hash: string): View | null {
   if (!raw || raw === "/") return { screen: "mode" };
   const [pathPart = "", queryPart] = raw.split("?");
   const segs = pathPart.split("/").filter(Boolean);
+  if (segs[0] === "profile") return { screen: "profile" };
+  if (segs[0] === "security") return { screen: "security" };
   if (segs[0] === "project-setup") return { screen: "project-gate" };
   const mode = segs[0];
   if (mode !== "global" && mode !== "project") return null;

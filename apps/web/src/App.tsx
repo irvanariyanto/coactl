@@ -24,6 +24,7 @@ import {
   type Workspace,
 } from "./api";
 import { ResourceKindSwitcher } from "./components/ResourceKindSwitcher";
+import { AppSidebar } from "./components/AppSidebar";
 import {
   modeToScope,
   parseHash,
@@ -46,9 +47,11 @@ import {
 import { preferredResourceKind, rememberResourceNav } from "./recent-resource-nav";
 import { clearDraft, loadDraft, saveDraft } from "./draft-store";
 import { CommandDetailView } from "./views/CommandDetailView";
+import { AuthSettingsPanel } from "./views/AuthSettingsPanel";
 import { CommandsListView } from "./views/CommandsListView";
 import { ModeHomeView } from "./views/ModeHomeView";
 import { ProjectGateView } from "./views/ProjectGateView";
+import { ProfileDataPanel } from "./views/ProfileDataPanel";
 import { ResourcesView } from "./views/ResourcesView";
 import { RuleDetailView } from "./views/RuleDetailView";
 import { RulesListView } from "./views/RulesListView";
@@ -103,8 +106,10 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [profile, setProfile] = useState<ProfileState | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const toastId = useRef(0);
   const profileLoaded = useRef(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
 
   const effectiveRoot = root.trim() || ".";
   const projectRootSet = Boolean(root.trim());
@@ -174,7 +179,12 @@ export function App() {
   }, [dirty]);
 
   const currentMode: Mode | null =
-    view.screen === "mode" || view.screen === "project-gate" ? null : view.mode;
+    view.screen === "mode" ||
+    view.screen === "profile" ||
+    view.screen === "security" ||
+    view.screen === "project-gate"
+      ? null
+      : view.mode;
   const authLocked = Boolean(auth?.enabled && !auth.unlocked);
 
   const pushToast = useCallback(
@@ -1358,6 +1368,12 @@ export function App() {
   if (view.screen === "project-gate") {
     crumbs.push({ label: "Project" });
   }
+  if (view.screen === "profile") {
+    crumbs.push({ label: "Portable profile" });
+  }
+  if (view.screen === "security") {
+    crumbs.push({ label: "Login & security" });
+  }
   if (
     view.screen === "tools" ||
     view.screen === "resources" ||
@@ -1450,6 +1466,27 @@ export function App() {
       view.screen === "rule" ||
       view.screen === "command" ||
       view.screen === "workflow");
+  const activeTool = "tool" in view ? view.tool : null;
+
+  function applyImportedProfile(next: ProfileState) {
+    setProfile(next);
+    setRoot(next.activeProject ?? "");
+    setRecent(next.recentProjects);
+    localStorage.setItem("coactl.root", next.activeProject ?? "");
+    localStorage.setItem("coactl.recentRoots", JSON.stringify(next.recentProjects));
+  }
+
+  function closeSidebar() {
+    setSidebarOpen(false);
+    if (window.matchMedia("(max-width: 900px)").matches) {
+      window.setTimeout(() => menuButtonRef.current?.focus(), 0);
+    }
+  }
+
+  function navigateFromSidebar(next: View) {
+    navigate(next);
+    closeSidebar();
+  }
 
   if (!auth) {
     return (
@@ -1476,6 +1513,19 @@ export function App() {
   return (
     <div className="app">
       <header className="topbar">
+        <button
+          ref={menuButtonRef}
+          type="button"
+          className="menu-toggle"
+          aria-label="Open navigation"
+          aria-expanded={sidebarOpen}
+          aria-controls="app-sidebar"
+          onClick={() => setSidebarOpen(true)}
+        >
+          <span />
+          <span />
+          <span />
+        </button>
         <button type="button" className="brand" onClick={() => navigate({ screen: "mode" })}>
           <span className="logo">c</span>
           <span>
@@ -1568,6 +1618,34 @@ export function App() {
           </button>
         )}
       </header>
+      <div className="app-body">
+        <div id="app-sidebar">
+          <AppSidebar
+            open={sidebarOpen}
+            view={view}
+            currentMode={currentMode}
+            activeTool={activeTool}
+            root={root}
+            recent={recent}
+            onClose={closeSidebar}
+            onNavigate={navigateFromSidebar}
+            onSelectMode={(mode) => {
+              if (mode === "project") navigate({ screen: "project-gate" });
+              else goMode(mode);
+              closeSidebar();
+            }}
+            onSelectProject={(path) => {
+              selectProject(path);
+              navigate({ screen: "tools", mode: "project" });
+              closeSidebar();
+            }}
+            onSelectResource={(kind) => {
+              if (!currentMode || !activeTool) return;
+              openResourceKind(currentMode, activeTool, kind);
+              closeSidebar();
+            }}
+          />
+        </div>
 
       <main className="content">
         {crumbs.length > 0 && (
@@ -1597,20 +1675,15 @@ export function App() {
         )}
 
         {view.screen === "mode" && (
-          <ModeHomeView
-            onSelect={goMode}
-            auth={auth}
-            onAuthChange={setAuth}
-            onToast={pushToast}
-            profile={profile}
-            onProfileImported={(next) => {
-              setProfile(next);
-              setRoot(next.activeProject ?? "");
-              setRecent(next.recentProjects);
-              localStorage.setItem("coactl.root", next.activeProject ?? "");
-              localStorage.setItem("coactl.recentRoots", JSON.stringify(next.recentProjects));
-            }}
-          />
+          <ModeHomeView onSelect={goMode} />
+        )}
+
+        {view.screen === "profile" && (
+          <ProfileDataPanel profile={profile} onImported={applyImportedProfile} onToast={pushToast} />
+        )}
+
+        {view.screen === "security" && (
+          <AuthSettingsPanel auth={auth} onAuthChange={setAuth} onToast={pushToast} />
         )}
 
         {view.screen === "project-gate" && (
@@ -2047,6 +2120,7 @@ export function App() {
           />
         )}
       </main>
+      </div>
 
       {toasts.length > 0 && (
         <div className="toasts" role="status" aria-live="polite">

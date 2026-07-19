@@ -1,18 +1,10 @@
-import type { AuthStatus, ProfileState } from "../api";
 import type { Mode } from "../nav";
-import { AuthSettingsPanel } from "./AuthSettingsPanel";
-import { ProfileDataPanel } from "./ProfileDataPanel";
 
 interface Props {
   onSelect: (mode: Mode) => void;
-  auth: AuthStatus;
-  onAuthChange: (status: AuthStatus) => void;
-  onToast: (kind: "success" | "error", text: string) => void;
-  profile: ProfileState | null;
-  onProfileImported: (profile: ProfileState) => void;
 }
 
-export function ModeHomeView({ onSelect, auth, onAuthChange, onToast, profile, onProfileImported }: Props) {
+export function ModeHomeView({ onSelect }: Props) {
   return (
     <>
       <div className="hero">
@@ -48,8 +40,6 @@ export function ModeHomeView({ onSelect, auth, onAuthChange, onToast, profile, o
           <span className="go">Choose a project →</span>
         </button>
       </div>
-      <AuthSettingsPanel auth={auth} onAuthChange={onAuthChange} onToast={onToast} />
-      <ProfileDataPanel profile={profile} onImported={onProfileImported} onToast={onToast} />
     </>
   );
 }

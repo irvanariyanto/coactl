@@ -120,6 +120,7 @@ Commands / Workflows remain Phase B (later).
 ### 6.4 Navigation
 
 - Drill-down with breadcrumb (e.g. `Home / Global / Claude Code / Skills / review-pr`)
+- Persistent desktop sidebar for scope, recent projects, current-tool resources, profile, and security; accessible drawer on mobile
 - “Change mode” returns to mode home
 - Views are encoded in the URL hash: refresh, back/forward, and deep links restore the screen
 - Unsaved editor changes prompt before in-app navigation or tab close
