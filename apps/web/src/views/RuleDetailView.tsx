@@ -1,5 +1,14 @@
 import { type KeyboardEvent } from "react";
-import type { Rule, RuleImportPlan, RuleImportResult, RuleTool, Workspace } from "../api";
+import type {
+  Rule,
+  RuleImportPlan,
+  RuleImportResult,
+  RuleTool,
+  ScopeMode,
+  SkillTool,
+  Workspace,
+} from "../api";
+import { DraftRecoveryBanner } from "../components/DraftRecoveryBanner";
 import { ImportPanel } from "../components/ImportPanel";
 import { buildRuleDestinations } from "../import-destinations";
 import { formatRuleDestPath, toolLabel, type Mode } from "../nav";
@@ -12,6 +21,9 @@ interface Props {
   projectRootSet: boolean;
   busy: boolean;
   dirty: boolean;
+  pendingDraft: string | null;
+  onRestoreDraft: () => void;
+  onDiscardDraft: () => void;
   onChangeContents: (contents: string) => void;
   onSave: () => Promise<void>;
   onDelete: () => Promise<void>;
@@ -23,6 +35,12 @@ interface Props {
     targets: Array<{ tool: RuleTool; scope: "global" | "project" }>,
     overwrite: boolean,
   ) => Promise<RuleImportResult>;
+  onOpenWritten: (target: {
+    id: string;
+    tool: SkillTool;
+    scope: ScopeMode;
+    filePath: string;
+  }) => void;
 }
 
 export function RuleDetailView({
@@ -33,11 +51,15 @@ export function RuleDetailView({
   projectRootSet,
   busy,
   dirty,
+  pendingDraft,
+  onRestoreDraft,
+  onDiscardDraft,
   onChangeContents,
   onSave,
   onDelete,
   onPreviewImport,
   onImport,
+  onOpenWritten,
 }: Props) {
   const destinations = buildRuleDestinations(tool, mode, workspace, projectRootSet);
   const lineCount = rule.contents.split("\n").length;
@@ -85,6 +107,9 @@ export function RuleDetailView({
             </button>
           </div>
         </div>
+        {pendingDraft && !rule.readOnly && (
+          <DraftRecoveryBanner onRestore={onRestoreDraft} onDiscard={onDiscardDraft} />
+        )}
         <textarea
           id="rule-contents"
           className="editor-textarea"
@@ -112,6 +137,8 @@ export function RuleDetailView({
           projectRootSet={projectRootSet}
           busy={busy}
           pathIdHint={rule.id}
+          sourceTool={tool}
+          sourceMode={mode}
           formatDestPath={(dir, idHint, t) =>
             formatRuleDestPath(dir, idHint, t, workspace.ruleLayoutsByTool[t])
           }
@@ -131,6 +158,7 @@ export function RuleDetailView({
             );
             return res.results;
           }}
+          onOpenWritten={onOpenWritten}
         />
       </section>
     </div>

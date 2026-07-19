@@ -1390,6 +1390,35 @@ tbody tr.row-link:hover {
   margin-top: 0.75rem;
 }
 
+.hotkey-hint {
+  opacity: 0.75;
+  font-size: 0.78rem;
+}
+
+.draft-recovery {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.toast-action {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+  padding: 0.1rem 0.35rem;
+  box-shadow: none;
+}
+
+.toast-action:hover {
+  background: color-mix(in srgb, var(--surface-1) 35%, transparent);
+  border-color: transparent;
+}
+
 /* ---------- Toasts ---------- */
 
 .toasts {

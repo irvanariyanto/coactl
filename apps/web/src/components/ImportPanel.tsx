@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ImportPlan, ImportResult, ScopeMode } from "../api";
 import type { ImportDestination } from "../import-destinations";
-import { toolLabel, type SkillTool } from "../nav";
+import { toolLabel, type Mode, type SkillTool } from "../nav";
 import { ContentsDiff } from "./ContentsDiff";
 
 export interface ImportPanelProps {
@@ -16,6 +16,9 @@ export interface ImportPanelProps {
   showSkillColumn?: boolean;
   /** Incoming contents by skill id — used for overwrite diffs. */
   incomingById: Record<string, string>;
+  /** Prefill: same tool, opposite scope (most common move). */
+  sourceTool?: SkillTool;
+  sourceMode?: Mode;
   onPreview: (
     targets: Array<{ tool: SkillTool; scope: ScopeMode }>,
     overwrite: boolean,
@@ -24,10 +27,29 @@ export interface ImportPanelProps {
     targets: Array<{ tool: SkillTool; scope: ScopeMode }>,
     overwrite: boolean,
   ) => Promise<ImportResult["results"]>;
+  /** Navigate to a successfully written import target. */
+  onOpenWritten?: (target: {
+    id: string;
+    tool: SkillTool;
+    scope: ScopeMode;
+    filePath: string;
+  }) => void;
 }
 
 function defaultDestPath(dir: string, idHint: string): string {
   return `${dir}/${idHint}/SKILL.md`;
+}
+
+function defaultOtherScopeKeys(
+  destinations: ImportDestination[],
+  sourceTool?: SkillTool,
+  sourceMode?: Mode,
+): Set<string> {
+  if (!sourceTool || !sourceMode) return new Set();
+  const other: ScopeMode = sourceMode === "global" ? "project" : "global";
+  return new Set(
+    destinations.filter((d) => d.tool === sourceTool && d.scope === other).map((d) => d.key),
+  );
 }
 
 export function ImportPanel({
@@ -39,14 +61,31 @@ export function ImportPanel({
   blurb,
   showSkillColumn = false,
   incomingById,
+  sourceTool,
+  sourceMode,
   onPreview,
   onApply,
+  onOpenWritten,
 }: ImportPanelProps) {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(() =>
+    defaultOtherScopeKeys(destinations, sourceTool, sourceMode),
+  );
   const [overwrite, setOverwrite] = useState(false);
   const [plan, setPlan] = useState<ImportPlan["plan"] | null>(null);
   const [results, setResults] = useState<ImportResult["results"] | null>(null);
   const [diffKey, setDiffKey] = useState<string | null>(null);
+  const [seededDefault, setSeededDefault] = useState(
+    () => defaultOtherScopeKeys(destinations, sourceTool, sourceMode).size > 0,
+  );
+
+  // If project root appears later, seed the opposite-scope default once.
+  useEffect(() => {
+    if (seededDefault) return;
+    const defaults = defaultOtherScopeKeys(destinations, sourceTool, sourceMode);
+    if (defaults.size === 0) return;
+    setSelected(defaults);
+    setSeededDefault(true);
+  }, [destinations, sourceTool, sourceMode, seededDefault]);
 
   function toggle(key: string) {
     setSelected((prev) => {
@@ -254,49 +293,77 @@ export function ImportPanel({
       )}
 
       {results && (
-        <div className="table-wrap" style={{ marginTop: "0.9rem" }}>
-          <table>
-            <thead>
-              <tr>
-                {showSkillColumn && <th>Skill</th>}
-                <th>Target</th>
-                <th>Result</th>
-                <th>Path</th>
-              </tr>
-            </thead>
-            <tbody>
-              {results.map((r) => (
-                <tr key={`${r.id}:${r.tool}:${r.scope}`}>
-                  {showSkillColumn && (
-                    <td>
-                      <strong>{r.id}</strong>
-                    </td>
-                  )}
-                  <td>
-                    {toolLabel(r.tool)}
-                    <span className={`badge scope-${r.scope}`} style={{ marginLeft: 6 }}>
-                      {r.scope}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`badge ${statusTone(r.status)}`}>{r.status}</span>
-                    {r.error && (
-                      <span className="muted" style={{ display: "block", fontSize: "0.78rem" }}>
-                        {r.error}
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    {r.filePath && (
-                      <code className="path-line" title={r.filePath}>
-                        {r.filePath}
-                      </code>
-                    )}
-                  </td>
+        <div className="import-plan" style={{ marginTop: "0.9rem" }}>
+          {onOpenWritten &&
+            (() => {
+              const first = results.find((r) => r.status === "written" && r.filePath);
+              if (!first?.filePath) return null;
+              return (
+                <div className="import-plan-summary">
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={() =>
+                      onOpenWritten({
+                        id: first.id,
+                        tool: first.tool,
+                        scope: first.scope,
+                        filePath: first.filePath!,
+                      })
+                    }
+                  >
+                    Open written target
+                  </button>
+                  <span className="muted import-plan-hint">
+                    {toolLabel(first.tool)} · {first.scope} · {first.id}
+                  </span>
+                </div>
+              );
+            })()}
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  {showSkillColumn && <th>Skill</th>}
+                  <th>Target</th>
+                  <th>Result</th>
+                  <th>Path</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {results.map((r) => (
+                  <tr key={`${r.id}:${r.tool}:${r.scope}`}>
+                    {showSkillColumn && (
+                      <td>
+                        <strong>{r.id}</strong>
+                      </td>
+                    )}
+                    <td>
+                      {toolLabel(r.tool)}
+                      <span className={`badge scope-${r.scope}`} style={{ marginLeft: 6 }}>
+                        {r.scope}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`badge ${statusTone(r.status)}`}>{r.status}</span>
+                      {r.error && (
+                        <span className="muted" style={{ display: "block", fontSize: "0.78rem" }}>
+                          {r.error}
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      {r.filePath && (
+                        <code className="path-line" title={r.filePath}>
+                          {r.filePath}
+                        </code>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

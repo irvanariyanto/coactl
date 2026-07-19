@@ -1,11 +1,14 @@
 import { type KeyboardEvent } from "react";
 import type {
+  ScopeMode,
+  SkillTool,
   Workflow,
   WorkflowImportPlan,
   WorkflowImportResult,
   WorkflowTool,
   Workspace,
 } from "../api";
+import { DraftRecoveryBanner } from "../components/DraftRecoveryBanner";
 import { ImportPanel } from "../components/ImportPanel";
 import { buildWorkflowDestinations } from "../import-destinations";
 import { formatWorkflowDestPath, toolLabel, type Mode } from "../nav";
@@ -18,6 +21,9 @@ interface Props {
   projectRootSet: boolean;
   busy: boolean;
   dirty: boolean;
+  pendingDraft: string | null;
+  onRestoreDraft: () => void;
+  onDiscardDraft: () => void;
   onChangeContents: (contents: string) => void;
   onSave: () => Promise<void>;
   onDelete: () => Promise<void>;
@@ -29,6 +35,12 @@ interface Props {
     targets: Array<{ tool: WorkflowTool; scope: "global" | "project" }>,
     overwrite: boolean,
   ) => Promise<WorkflowImportResult>;
+  onOpenWritten: (target: {
+    id: string;
+    tool: SkillTool;
+    scope: ScopeMode;
+    filePath: string;
+  }) => void;
 }
 
 export function WorkflowDetailView({
@@ -39,11 +51,15 @@ export function WorkflowDetailView({
   projectRootSet,
   busy,
   dirty,
+  pendingDraft,
+  onRestoreDraft,
+  onDiscardDraft,
   onChangeContents,
   onSave,
   onDelete,
   onPreviewImport,
   onImport,
+  onOpenWritten,
 }: Props) {
   const destinations = buildWorkflowDestinations(tool, mode, workspace, projectRootSet);
   const lineCount = workflow.contents.split("\n").length;
@@ -91,6 +107,9 @@ export function WorkflowDetailView({
             </button>
           </div>
         </div>
+        {pendingDraft && !workflow.readOnly && (
+          <DraftRecoveryBanner onRestore={onRestoreDraft} onDiscard={onDiscardDraft} />
+        )}
         <textarea
           id="workflow-contents"
           className="editor-textarea"
@@ -118,6 +137,8 @@ export function WorkflowDetailView({
           projectRootSet={projectRootSet}
           busy={busy}
           pathIdHint={workflow.id}
+          sourceTool={tool}
+          sourceMode={mode}
           formatDestPath={(dir, idHint) => formatWorkflowDestPath(dir, idHint)}
           blurb="Copy this dynamic workflow script to the other scope (global ↔ project)."
           incomingById={{ [workflow.id]: workflow.contents }}
@@ -135,6 +156,7 @@ export function WorkflowDetailView({
             );
             return res.results;
           }}
+          onOpenWritten={onOpenWritten}
         />
       </section>
     </div>

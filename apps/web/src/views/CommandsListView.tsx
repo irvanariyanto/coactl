@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   Command,
   CommandImportPlan,
@@ -10,8 +10,9 @@ import type {
 import { EmptyResourceState } from "../components/EmptyResourceState";
 import { ImportPanel } from "../components/ImportPanel";
 import { PathCandidates } from "../components/PathCandidates";
+import { useListHotkeys } from "../hooks/useListHotkeys";
 import { buildCommandDestinations } from "../import-destinations";
-import { formatCommandDestPath, toolLabel, type Mode } from "../nav";
+import { formatCommandDestPath, toolLabel, type Mode, type SkillTool } from "../nav";
 
 interface Props {
   mode: Mode;
@@ -61,6 +62,7 @@ export function CommandsListView({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
   const idInputRef = useRef<HTMLInputElement>(null);
+  const filterRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (creating) idInputRef.current?.focus();
@@ -123,10 +125,26 @@ export function CommandsListView({
     });
   }
 
-  function clearSelection() {
+  const clearSelection = useCallback(() => {
     setSelected(new Set());
     setImporting(false);
-  }
+  }, []);
+
+  const openHotkeyTarget = useCallback(() => {
+    const row = selectedRows[0] ?? visible[0];
+    if (row) onOpen(row);
+  }, [selectedRows, visible, onOpen]);
+
+  useListHotkeys({
+    enabled: !creating,
+    filterRef,
+    onNew: () => setCreating(true),
+    onClearSelection: clearSelection,
+    onClearFilter: () => setQuery(""),
+    hasFilter: Boolean(query.trim()),
+    hasSelection: selected.size > 0,
+    onOpen: openHotkeyTarget,
+  });
 
   const label = resourceLabel(tool);
   const pathLabel =
@@ -140,19 +158,22 @@ export function CommandsListView({
           <span className={`badge scope-${mode}`}>{mode}</span>
           <span className="muted" style={{ fontWeight: 400, fontSize: "0.85rem" }}>
             {commands.length} item{commands.length === 1 ? "" : "s"}
+            <span className="hotkey-hint" title="Keyboard shortcuts">
+              {" "}
+              · / filter · n new · ↵ open · esc clear
+            </span>
           </span>
         </h2>
         <div className="list-tools">
-          {commands.length > 1 && (
-            <input
-              className="search-input"
-              type="search"
-              aria-label={`Filter ${label}`}
-              placeholder="Filter…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          )}
+          <input
+            ref={filterRef}
+            className="search-input"
+            type="search"
+            aria-label={`Filter ${label}`}
+            placeholder="Filter… (/)"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
           {!creating && (
             <button className="primary" type="button" onClick={() => setCreating(true)}>
               + New command
@@ -252,6 +273,8 @@ export function CommandsListView({
             destinations={destinations}
             projectRootSet={projectRootSet}
             busy={busy}
+            sourceTool={tool as SkillTool}
+            sourceMode={mode}
             pathIdHint="<id>"
             formatDestPath={(dir, idHint) => formatCommandDestPath(dir, idHint)}
             showSkillColumn

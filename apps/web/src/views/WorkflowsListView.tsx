@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   ScopeMode,
   Workflow,
@@ -10,8 +10,9 @@ import type {
 import { EmptyResourceState } from "../components/EmptyResourceState";
 import { ImportPanel } from "../components/ImportPanel";
 import { PathCandidates } from "../components/PathCandidates";
+import { useListHotkeys } from "../hooks/useListHotkeys";
 import { buildWorkflowDestinations } from "../import-destinations";
-import { formatWorkflowDestPath, toolLabel, type Mode } from "../nav";
+import { formatWorkflowDestPath, toolLabel, type Mode, type SkillTool } from "../nav";
 
 interface Props {
   mode: Mode;
@@ -56,6 +57,7 @@ export function WorkflowsListView({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
   const idInputRef = useRef<HTMLInputElement>(null);
+  const filterRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (creating) idInputRef.current?.focus();
@@ -117,10 +119,26 @@ export function WorkflowsListView({
     });
   }
 
-  function clearSelection() {
+  const clearSelection = useCallback(() => {
     setSelected(new Set());
     setImporting(false);
-  }
+  }, []);
+
+  const openHotkeyTarget = useCallback(() => {
+    const row = selectedRows[0] ?? visible[0];
+    if (row) onOpen(row);
+  }, [selectedRows, visible, onOpen]);
+
+  useListHotkeys({
+    enabled: !creating,
+    filterRef,
+    onNew: () => setCreating(true),
+    onClearSelection: clearSelection,
+    onClearFilter: () => setQuery(""),
+    hasFilter: Boolean(query.trim()),
+    hasSelection: selected.size > 0,
+    onOpen: openHotkeyTarget,
+  });
 
   return (
     <section className="panel">
@@ -130,19 +148,22 @@ export function WorkflowsListView({
           <span className={`badge scope-${mode}`}>{mode}</span>
           <span className="muted" style={{ fontWeight: 400, fontSize: "0.85rem" }}>
             {workflows.length} item{workflows.length === 1 ? "" : "s"}
+            <span className="hotkey-hint" title="Keyboard shortcuts">
+              {" "}
+              · / filter · n new · ↵ open · esc clear
+            </span>
           </span>
         </h2>
         <div className="list-tools">
-          {workflows.length > 1 && (
-            <input
-              className="search-input"
-              type="search"
-              aria-label="Filter workflows"
-              placeholder="Filter…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          )}
+          <input
+            ref={filterRef}
+            className="search-input"
+            type="search"
+            aria-label="Filter workflows"
+            placeholder="Filter… (/)"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
           {!creating && (
             <button className="primary" type="button" onClick={() => setCreating(true)}>
               + New workflow
@@ -242,6 +263,8 @@ export function WorkflowsListView({
             destinations={destinations}
             projectRootSet={projectRootSet}
             busy={busy}
+            sourceTool={tool as SkillTool}
+            sourceMode={mode}
             pathIdHint="<id>"
             formatDestPath={(dir, idHint) => formatWorkflowDestPath(dir, idHint)}
             showSkillColumn={false}

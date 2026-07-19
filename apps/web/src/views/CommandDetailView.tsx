@@ -1,5 +1,14 @@
 import { type KeyboardEvent } from "react";
-import type { Command, CommandImportPlan, CommandImportResult, CommandTool, Workspace } from "../api";
+import type {
+  Command,
+  CommandImportPlan,
+  CommandImportResult,
+  CommandTool,
+  ScopeMode,
+  SkillTool,
+  Workspace,
+} from "../api";
+import { DraftRecoveryBanner } from "../components/DraftRecoveryBanner";
 import { ImportPanel } from "../components/ImportPanel";
 import { buildCommandDestinations } from "../import-destinations";
 import { formatCommandDestPath, toolLabel, type Mode } from "../nav";
@@ -12,6 +21,9 @@ interface Props {
   projectRootSet: boolean;
   busy: boolean;
   dirty: boolean;
+  pendingDraft: string | null;
+  onRestoreDraft: () => void;
+  onDiscardDraft: () => void;
   onChangeContents: (contents: string) => void;
   onSave: () => Promise<void>;
   onDelete: () => Promise<void>;
@@ -23,6 +35,12 @@ interface Props {
     targets: Array<{ tool: CommandTool; scope: "global" | "project" }>,
     overwrite: boolean,
   ) => Promise<CommandImportResult>;
+  onOpenWritten: (target: {
+    id: string;
+    tool: SkillTool;
+    scope: ScopeMode;
+    filePath: string;
+  }) => void;
 }
 
 export function CommandDetailView({
@@ -33,11 +51,15 @@ export function CommandDetailView({
   projectRootSet,
   busy,
   dirty,
+  pendingDraft,
+  onRestoreDraft,
+  onDiscardDraft,
   onChangeContents,
   onSave,
   onDelete,
   onPreviewImport,
   onImport,
+  onOpenWritten,
 }: Props) {
   const destinations = buildCommandDestinations(tool, mode, workspace, projectRootSet);
   const lineCount = command.contents.split("\n").length;
@@ -87,6 +109,9 @@ export function CommandDetailView({
             </button>
           </div>
         </div>
+        {pendingDraft && !command.readOnly && (
+          <DraftRecoveryBanner onRestore={onRestoreDraft} onDiscard={onDiscardDraft} />
+        )}
         <textarea
           id="command-contents"
           className="editor-textarea"
@@ -114,6 +139,8 @@ export function CommandDetailView({
           projectRootSet={projectRootSet}
           busy={busy}
           pathIdHint={command.id}
+          sourceTool={tool}
+          sourceMode={mode}
           formatDestPath={(dir, idHint) => formatCommandDestPath(dir, idHint)}
           blurb={`Copy this ${kindLabel} to other command-capable tools and/or scope.`}
           incomingById={{ [command.id]: command.contents }}
@@ -131,6 +158,7 @@ export function CommandDetailView({
             );
             return res.results;
           }}
+          onOpenWritten={onOpenWritten}
         />
       </section>
     </div>

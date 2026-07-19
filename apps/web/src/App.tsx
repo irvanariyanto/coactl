@@ -43,6 +43,7 @@ import {
   rememberProject,
 } from "./recent-projects";
 import { preferredResourceKind, rememberResourceNav } from "./recent-resource-nav";
+import { clearDraft, loadDraft, saveDraft } from "./draft-store";
 import { CommandDetailView } from "./views/CommandDetailView";
 import { CommandsListView } from "./views/CommandsListView";
 import { ModeHomeView } from "./views/ModeHomeView";
@@ -61,6 +62,7 @@ interface Toast {
   id: number;
   kind: "success" | "error";
   text: string;
+  action?: { label: string; onClick: () => void };
 }
 
 const UNSAVED_PROMPT = "You have unsaved changes. Discard them?";
@@ -94,6 +96,7 @@ export function App() {
   const [commandDraft, setCommandDraft] = useState<Command | null>(null);
   const [workflowDraft, setWorkflowDraft] = useState<Workflow | null>(null);
   const [savedContents, setSavedContents] = useState<string | null>(null);
+  const [pendingDraft, setPendingDraft] = useState<string | null>(null);
   const [showAllInstalled, setShowAllInstalled] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [busy, setBusy] = useState(false);
@@ -171,13 +174,19 @@ export function App() {
     view.screen === "mode" || view.screen === "project-gate" ? null : view.mode;
   const authLocked = Boolean(auth?.enabled && !auth.unlocked);
 
-  const pushToast = useCallback((kind: Toast["kind"], text: string) => {
-    const id = ++toastId.current;
-    setToasts((prev) => [...prev.slice(-3), { id, kind, text }]);
-    window.setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, kind === "error" ? 8000 : 4000);
-  }, []);
+  const pushToast = useCallback(
+    (kind: Toast["kind"], text: string, action?: Toast["action"]) => {
+      const id = ++toastId.current;
+      setToasts((prev) => [...prev.slice(-3), { id, kind, text, action }]);
+      window.setTimeout(
+        () => {
+          setToasts((prev) => prev.filter((t) => t.id !== id));
+        },
+        action ? 12000 : kind === "error" ? 8000 : 4000,
+      );
+    },
+    [],
+  );
 
   const dismissToast = (id: number) => setToasts((prev) => prev.filter((t) => t.id !== id));
 
@@ -326,19 +335,28 @@ export function App() {
       setDraft(null);
       if (view.screen !== "rule" && view.screen !== "command" && view.screen !== "workflow") {
         setSavedContents(null);
+        setPendingDraft(null);
       }
       return;
     }
     const scope = modeToScope(view.mode);
     let cancelled = false;
     setBusy(true);
+    setPendingDraft(null);
     void api
       .getSkill(effectiveRoot, view.tool, view.id, scope, view.path)
       .then((res) => {
-        if (!cancelled) {
-          setDraft(res.skill);
-          setSavedContents(res.skill.contents);
-        }
+        if (cancelled) return;
+        setDraft(res.skill);
+        setSavedContents(res.skill.contents);
+        const local = loadDraft(
+          "skill",
+          res.skill.tool,
+          res.skill.scope,
+          res.skill.id,
+          res.skill.filePath,
+        );
+        setPendingDraft(local && local !== res.skill.contents ? local : null);
       })
       .catch((err) => {
         if (!cancelled) pushToast("error", (err as Error).message);
@@ -360,13 +378,21 @@ export function App() {
     const scope = modeToScope(view.mode);
     let cancelled = false;
     setBusy(true);
+    setPendingDraft(null);
     void api
       .getRule(effectiveRoot, view.tool, view.id, scope, view.path)
       .then((res) => {
-        if (!cancelled) {
-          setRuleDraft(res.rule);
-          setSavedContents(res.rule.contents);
-        }
+        if (cancelled) return;
+        setRuleDraft(res.rule);
+        setSavedContents(res.rule.contents);
+        const local = loadDraft(
+          "rule",
+          res.rule.tool,
+          res.rule.scope,
+          res.rule.id,
+          res.rule.filePath,
+        );
+        setPendingDraft(local && local !== res.rule.contents ? local : null);
       })
       .catch((err) => {
         if (!cancelled) pushToast("error", (err as Error).message);
@@ -388,13 +414,21 @@ export function App() {
     const scope = modeToScope(view.mode);
     let cancelled = false;
     setBusy(true);
+    setPendingDraft(null);
     void api
       .getCommand(effectiveRoot, view.tool, view.id, scope, view.path)
       .then((res) => {
-        if (!cancelled) {
-          setCommandDraft(res.command);
-          setSavedContents(res.command.contents);
-        }
+        if (cancelled) return;
+        setCommandDraft(res.command);
+        setSavedContents(res.command.contents);
+        const local = loadDraft(
+          "command",
+          res.command.tool,
+          res.command.scope,
+          res.command.id,
+          res.command.filePath,
+        );
+        setPendingDraft(local && local !== res.command.contents ? local : null);
       })
       .catch((err) => {
         if (!cancelled) pushToast("error", (err as Error).message);
@@ -416,13 +450,21 @@ export function App() {
     const scope = modeToScope(view.mode);
     let cancelled = false;
     setBusy(true);
+    setPendingDraft(null);
     void api
       .getWorkflow(effectiveRoot, view.tool, view.id, scope, view.path)
       .then((res) => {
-        if (!cancelled) {
-          setWorkflowDraft(res.workflow);
-          setSavedContents(res.workflow.contents);
-        }
+        if (cancelled) return;
+        setWorkflowDraft(res.workflow);
+        setSavedContents(res.workflow.contents);
+        const local = loadDraft(
+          "workflow",
+          res.workflow.tool,
+          res.workflow.scope,
+          res.workflow.id,
+          res.workflow.filePath,
+        );
+        setPendingDraft(local && local !== res.workflow.contents ? local : null);
       })
       .catch((err) => {
         if (!cancelled) pushToast("error", (err as Error).message);
@@ -434,6 +476,44 @@ export function App() {
       cancelled = true;
     };
   }, [authLocked, view, effectiveRoot, pushToast]);
+
+  // Autosave dirty editor contents to localStorage (survives refresh).
+  useEffect(() => {
+    if (!dirty) return;
+    const handle = window.setTimeout(() => {
+      if (view.screen === "skill" && draft) {
+        saveDraft("skill", draft.tool, draft.scope, draft.id, draft.filePath, draft.contents);
+      } else if (view.screen === "rule" && ruleDraft) {
+        saveDraft(
+          "rule",
+          ruleDraft.tool,
+          ruleDraft.scope,
+          ruleDraft.id,
+          ruleDraft.filePath,
+          ruleDraft.contents,
+        );
+      } else if (view.screen === "command" && commandDraft) {
+        saveDraft(
+          "command",
+          commandDraft.tool,
+          commandDraft.scope,
+          commandDraft.id,
+          commandDraft.filePath,
+          commandDraft.contents,
+        );
+      } else if (view.screen === "workflow" && workflowDraft) {
+        saveDraft(
+          "workflow",
+          workflowDraft.tool,
+          workflowDraft.scope,
+          workflowDraft.id,
+          workflowDraft.filePath,
+          workflowDraft.contents,
+        );
+      }
+    }, 400);
+    return () => window.clearTimeout(handle);
+  }, [dirty, view.screen, draft, ruleDraft, commandDraft, workflowDraft]);
 
   function rememberRoot(path: string) {
     const trimmed = path.trim();
@@ -604,6 +684,8 @@ export function App() {
       );
       setDraft(skill);
       setSavedContents(skill.contents);
+      setPendingDraft(null);
+      clearDraft("skill", skill.tool, skill.scope, skill.id, skill.filePath);
       pushToast("success", "Saved");
     } catch (err) {
       pushToast("error", (err as Error).message);
@@ -629,6 +711,8 @@ export function App() {
       );
       setRuleDraft(rule);
       setSavedContents(rule.contents);
+      setPendingDraft(null);
+      clearDraft("rule", rule.tool, rule.scope, rule.id, rule.filePath);
       pushToast("success", "Saved");
     } catch (err) {
       pushToast("error", (err as Error).message);
@@ -654,6 +738,8 @@ export function App() {
       );
       setCommandDraft(command);
       setSavedContents(command.contents);
+      setPendingDraft(null);
+      clearDraft("command", command.tool, command.scope, command.id, command.filePath);
       pushToast("success", "Saved");
     } catch (err) {
       pushToast("error", (err as Error).message);
@@ -679,6 +765,8 @@ export function App() {
       );
       setWorkflowDraft(workflow);
       setSavedContents(workflow.contents);
+      setPendingDraft(null);
+      clearDraft("workflow", workflow.tool, workflow.scope, workflow.id, workflow.filePath);
       pushToast("success", "Saved");
     } catch (err) {
       pushToast("error", (err as Error).message);
@@ -690,11 +778,50 @@ export function App() {
   async function handleDelete() {
     if (!draft || view.screen !== "skill") return;
     if (!confirm(`Delete ${draft.tool}/${draft.id}?`)) return;
+    const snapshot = { ...draft };
+    const listView = { screen: "skills" as const, mode: view.mode, tool: view.tool };
     setBusy(true);
     try {
-      await api.deleteSkill(effectiveRoot, draft.tool, draft.id, draft.scope, draft.filePath);
-      pushToast("success", `Deleted ${draft.id}`);
-      setView({ screen: "skills", mode: view.mode, tool: view.tool });
+      await api.deleteSkill(
+        effectiveRoot,
+        snapshot.tool,
+        snapshot.id,
+        snapshot.scope,
+        snapshot.filePath,
+      );
+      clearDraft("skill", snapshot.tool, snapshot.scope, snapshot.id, snapshot.filePath);
+      setPendingDraft(null);
+      setView(listView);
+      pushToast("success", `Deleted ${snapshot.id}`, {
+        label: "Undo",
+        onClick: () => {
+          void (async () => {
+            try {
+              const { skill } = await api.saveSkill(
+                effectiveRoot,
+                {
+                  tool: snapshot.tool,
+                  scope: snapshot.scope,
+                  id: snapshot.id,
+                  contents: snapshot.contents,
+                },
+                true,
+              );
+              pushToast("success", `Restored ${skill.id}`);
+              setSkillsVersion((v) => v + 1);
+              setView({
+                screen: "skill",
+                mode: listView.mode,
+                tool: listView.tool,
+                id: skill.id,
+                path: skill.filePath,
+              });
+            } catch (err) {
+              pushToast("error", (err as Error).message);
+            }
+          })();
+        },
+      });
     } catch (err) {
       pushToast("error", (err as Error).message);
     } finally {
@@ -705,17 +832,50 @@ export function App() {
   async function handleDeleteRule() {
     if (!ruleDraft || view.screen !== "rule") return;
     if (!confirm(`Delete ${ruleDraft.tool}/${ruleDraft.id}?`)) return;
+    const snapshot = { ...ruleDraft };
+    const listView = { screen: "rules" as const, mode: view.mode, tool: view.tool };
     setBusy(true);
     try {
       await api.deleteRule(
         effectiveRoot,
-        ruleDraft.tool,
-        ruleDraft.id,
-        ruleDraft.scope,
-        ruleDraft.filePath,
+        snapshot.tool,
+        snapshot.id,
+        snapshot.scope,
+        snapshot.filePath,
       );
-      pushToast("success", `Deleted ${ruleDraft.id}`);
-      setView({ screen: "rules", mode: view.mode, tool: view.tool });
+      clearDraft("rule", snapshot.tool, snapshot.scope, snapshot.id, snapshot.filePath);
+      setPendingDraft(null);
+      setView(listView);
+      pushToast("success", `Deleted ${snapshot.id}`, {
+        label: "Undo",
+        onClick: () => {
+          void (async () => {
+            try {
+              const { rule } = await api.saveRule(
+                effectiveRoot,
+                {
+                  tool: snapshot.tool,
+                  scope: snapshot.scope,
+                  id: snapshot.id,
+                  contents: snapshot.contents,
+                },
+                true,
+              );
+              pushToast("success", `Restored ${rule.id}`);
+              setRulesVersion((v) => v + 1);
+              setView({
+                screen: "rule",
+                mode: listView.mode,
+                tool: listView.tool,
+                id: rule.id,
+                path: rule.filePath,
+              });
+            } catch (err) {
+              pushToast("error", (err as Error).message);
+            }
+          })();
+        },
+      });
     } catch (err) {
       pushToast("error", (err as Error).message);
     } finally {
@@ -726,17 +886,50 @@ export function App() {
   async function handleDeleteCommand() {
     if (!commandDraft || view.screen !== "command") return;
     if (!confirm(`Delete ${commandDraft.tool}/${commandDraft.id}?`)) return;
+    const snapshot = { ...commandDraft };
+    const listView = { screen: "commands" as const, mode: view.mode, tool: view.tool };
     setBusy(true);
     try {
       await api.deleteCommand(
         effectiveRoot,
-        commandDraft.tool,
-        commandDraft.id,
-        commandDraft.scope,
-        commandDraft.filePath,
+        snapshot.tool,
+        snapshot.id,
+        snapshot.scope,
+        snapshot.filePath,
       );
-      pushToast("success", `Deleted ${commandDraft.id}`);
-      setView({ screen: "commands", mode: view.mode, tool: view.tool });
+      clearDraft("command", snapshot.tool, snapshot.scope, snapshot.id, snapshot.filePath);
+      setPendingDraft(null);
+      setView(listView);
+      pushToast("success", `Deleted ${snapshot.id}`, {
+        label: "Undo",
+        onClick: () => {
+          void (async () => {
+            try {
+              const { command } = await api.saveCommand(
+                effectiveRoot,
+                {
+                  tool: snapshot.tool,
+                  scope: snapshot.scope,
+                  id: snapshot.id,
+                  contents: snapshot.contents,
+                },
+                true,
+              );
+              pushToast("success", `Restored ${command.id}`);
+              setCommandsVersion((v) => v + 1);
+              setView({
+                screen: "command",
+                mode: listView.mode,
+                tool: listView.tool,
+                id: command.id,
+                path: command.filePath,
+              });
+            } catch (err) {
+              pushToast("error", (err as Error).message);
+            }
+          })();
+        },
+      });
     } catch (err) {
       pushToast("error", (err as Error).message);
     } finally {
@@ -747,17 +940,50 @@ export function App() {
   async function handleDeleteWorkflow() {
     if (!workflowDraft || view.screen !== "workflow") return;
     if (!confirm(`Delete ${workflowDraft.tool}/${workflowDraft.id}?`)) return;
+    const snapshot = { ...workflowDraft };
+    const listView = { screen: "workflows" as const, mode: view.mode, tool: view.tool };
     setBusy(true);
     try {
       await api.deleteWorkflow(
         effectiveRoot,
-        workflowDraft.tool,
-        workflowDraft.id,
-        workflowDraft.scope,
-        workflowDraft.filePath,
+        snapshot.tool,
+        snapshot.id,
+        snapshot.scope,
+        snapshot.filePath,
       );
-      pushToast("success", `Deleted ${workflowDraft.id}`);
-      setView({ screen: "workflows", mode: view.mode, tool: view.tool });
+      clearDraft("workflow", snapshot.tool, snapshot.scope, snapshot.id, snapshot.filePath);
+      setPendingDraft(null);
+      setView(listView);
+      pushToast("success", `Deleted ${snapshot.id}`, {
+        label: "Undo",
+        onClick: () => {
+          void (async () => {
+            try {
+              const { workflow } = await api.saveWorkflow(
+                effectiveRoot,
+                {
+                  tool: snapshot.tool,
+                  scope: snapshot.scope,
+                  id: snapshot.id,
+                  contents: snapshot.contents,
+                },
+                true,
+              );
+              pushToast("success", `Restored ${workflow.id}`);
+              setWorkflowsVersion((v) => v + 1);
+              setView({
+                screen: "workflow",
+                mode: listView.mode,
+                tool: listView.tool,
+                id: workflow.id,
+                path: workflow.filePath,
+              });
+            } catch (err) {
+              pushToast("error", (err as Error).message);
+            }
+          })();
+        },
+      });
     } catch (err) {
       pushToast("error", (err as Error).message);
     } finally {
@@ -1459,6 +1685,17 @@ export function App() {
             projectRootSet={projectRootSet}
             busy={busy}
             dirty={dirty}
+            pendingDraft={pendingDraft}
+            onRestoreDraft={() => {
+              if (!pendingDraft || !draft) return;
+              setDraft({ ...draft, contents: pendingDraft });
+              setPendingDraft(null);
+            }}
+            onDiscardDraft={() => {
+              if (!draft) return;
+              clearDraft("skill", draft.tool, draft.scope, draft.id, draft.filePath);
+              setPendingDraft(null);
+            }}
             onChangeContents={(contents) => setDraft({ ...draft, contents })}
             onSave={handleSave}
             onDelete={handleDelete}
@@ -1482,6 +1719,15 @@ export function App() {
               pushToast("success", "Import finished");
               if (currentMode) await refreshWorkspace(currentMode);
               return result;
+            }}
+            onOpenWritten={(target) => {
+              navigate({
+                screen: "skill",
+                mode: target.scope,
+                tool: target.tool,
+                id: target.id,
+                path: target.filePath,
+              });
             }}
           />
         )}
@@ -1520,6 +1766,17 @@ export function App() {
             projectRootSet={projectRootSet}
             busy={busy}
             dirty={dirty}
+            pendingDraft={pendingDraft}
+            onRestoreDraft={() => {
+              if (!pendingDraft || !ruleDraft) return;
+              setRuleDraft({ ...ruleDraft, contents: pendingDraft });
+              setPendingDraft(null);
+            }}
+            onDiscardDraft={() => {
+              if (!ruleDraft) return;
+              clearDraft("rule", ruleDraft.tool, ruleDraft.scope, ruleDraft.id, ruleDraft.filePath);
+              setPendingDraft(null);
+            }}
             onChangeContents={(contents) => setRuleDraft({ ...ruleDraft, contents })}
             onSave={handleSaveRule}
             onDelete={handleDeleteRule}
@@ -1543,6 +1800,15 @@ export function App() {
               pushToast("success", "Import finished");
               if (currentMode) await refreshWorkspace(currentMode);
               return result;
+            }}
+            onOpenWritten={(target) => {
+              navigate({
+                screen: "rule",
+                mode: target.scope,
+                tool: target.tool,
+                id: target.id,
+                path: target.filePath,
+              });
             }}
           />
         )}
@@ -1581,6 +1847,23 @@ export function App() {
             projectRootSet={projectRootSet}
             busy={busy}
             dirty={dirty}
+            pendingDraft={pendingDraft}
+            onRestoreDraft={() => {
+              if (!pendingDraft || !commandDraft) return;
+              setCommandDraft({ ...commandDraft, contents: pendingDraft });
+              setPendingDraft(null);
+            }}
+            onDiscardDraft={() => {
+              if (!commandDraft) return;
+              clearDraft(
+                "command",
+                commandDraft.tool,
+                commandDraft.scope,
+                commandDraft.id,
+                commandDraft.filePath,
+              );
+              setPendingDraft(null);
+            }}
             onChangeContents={(contents) => setCommandDraft({ ...commandDraft, contents })}
             onSave={handleSaveCommand}
             onDelete={handleDeleteCommand}
@@ -1608,6 +1891,16 @@ export function App() {
               pushToast("success", "Import finished");
               if (currentMode) await refreshWorkspace(currentMode);
               return result;
+            }}
+            onOpenWritten={(target) => {
+              if (!supportsCommands(target.tool)) return;
+              navigate({
+                screen: "command",
+                mode: target.scope,
+                tool: target.tool,
+                id: target.id,
+                path: target.filePath,
+              });
             }}
           />
         )}
@@ -1646,6 +1939,23 @@ export function App() {
             projectRootSet={projectRootSet}
             busy={busy}
             dirty={dirty}
+            pendingDraft={pendingDraft}
+            onRestoreDraft={() => {
+              if (!pendingDraft || !workflowDraft) return;
+              setWorkflowDraft({ ...workflowDraft, contents: pendingDraft });
+              setPendingDraft(null);
+            }}
+            onDiscardDraft={() => {
+              if (!workflowDraft) return;
+              clearDraft(
+                "workflow",
+                workflowDraft.tool,
+                workflowDraft.scope,
+                workflowDraft.id,
+                workflowDraft.filePath,
+              );
+              setPendingDraft(null);
+            }}
             onChangeContents={(contents) => setWorkflowDraft({ ...workflowDraft, contents })}
             onSave={handleSaveWorkflow}
             onDelete={handleDeleteWorkflow}
@@ -1674,6 +1984,16 @@ export function App() {
               if (currentMode) await refreshWorkspace(currentMode);
               return result;
             }}
+            onOpenWritten={(target) => {
+              if (!supportsWorkflows(target.tool)) return;
+              navigate({
+                screen: "workflow",
+                mode: target.scope,
+                tool: target.tool,
+                id: target.id,
+                path: target.filePath,
+              });
+            }}
           />
         )}
       </main>
@@ -1684,6 +2004,18 @@ export function App() {
             <div key={t.id} className={`toast ${t.kind}`}>
               <span className="toast-dot" />
               <span className="msg">{t.text}</span>
+              {t.action && (
+                <button
+                  type="button"
+                  className="toast-action"
+                  onClick={() => {
+                    t.action?.onClick();
+                    dismissToast(t.id);
+                  }}
+                >
+                  {t.action.label}
+                </button>
+              )}
               <button type="button" aria-label="Dismiss" onClick={() => dismissToast(t.id)}>
                 ×
               </button>

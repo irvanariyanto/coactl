@@ -1,5 +1,6 @@
 import { type KeyboardEvent } from "react";
-import type { ImportPlan, ImportResult, Skill, Workspace } from "../api";
+import type { ImportPlan, ImportResult, ScopeMode, Skill, Workspace } from "../api";
+import { DraftRecoveryBanner } from "../components/DraftRecoveryBanner";
 import { ImportPanel } from "../components/ImportPanel";
 import { buildDestinations } from "../import-destinations";
 import { toolLabel, type Mode, type SkillTool } from "../nav";
@@ -12,6 +13,9 @@ interface Props {
   projectRootSet: boolean;
   busy: boolean;
   dirty: boolean;
+  pendingDraft: string | null;
+  onRestoreDraft: () => void;
+  onDiscardDraft: () => void;
   onChangeContents: (contents: string) => void;
   onSave: () => Promise<void>;
   onDelete: () => Promise<void>;
@@ -23,6 +27,12 @@ interface Props {
     targets: Array<{ tool: SkillTool; scope: "global" | "project" }>,
     overwrite: boolean,
   ) => Promise<ImportResult>;
+  onOpenWritten: (target: {
+    id: string;
+    tool: SkillTool;
+    scope: ScopeMode;
+    filePath: string;
+  }) => void;
 }
 
 export function SkillDetailView({
@@ -33,11 +43,15 @@ export function SkillDetailView({
   projectRootSet,
   busy,
   dirty,
+  pendingDraft,
+  onRestoreDraft,
+  onDiscardDraft,
   onChangeContents,
   onSave,
   onDelete,
   onPreviewImport,
   onImport,
+  onOpenWritten,
 }: Props) {
   const destinations = buildDestinations(tool, mode, workspace, projectRootSet);
   const lineCount = skill.contents.split("\n").length;
@@ -90,6 +104,9 @@ export function SkillDetailView({
             but edits and deletes are blocked.
           </div>
         )}
+        {pendingDraft && !skill.readOnly && (
+          <DraftRecoveryBanner onRestore={onRestoreDraft} onDiscard={onDiscardDraft} />
+        )}
         <textarea
           id="skill-contents"
           className="editor-textarea"
@@ -117,6 +134,8 @@ export function SkillDetailView({
           projectRootSet={projectRootSet}
           busy={busy}
           pathIdHint={skill.id}
+          sourceTool={tool}
+          sourceMode={mode}
           blurb="Copy this skill to other tools and/or the other scope. Raw file contents are preserved — preview shows exactly what would happen before anything is written."
           incomingById={{ [skill.id]: skill.contents }}
           onPreview={async (targets, overwrite) => {
@@ -127,6 +146,7 @@ export function SkillDetailView({
             const res = await onImport(targets, overwrite);
             return res.results;
           }}
+          onOpenWritten={onOpenWritten}
         />
       </section>
     </div>

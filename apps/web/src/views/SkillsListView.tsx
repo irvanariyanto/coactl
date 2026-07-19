@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   GitSkillsInstallPlan,
   GitSkillsInstallResult,
@@ -13,6 +13,7 @@ import { EmptyResourceState } from "../components/EmptyResourceState";
 import { GitInstallPanel } from "../components/GitInstallPanel";
 import { ImportPanel } from "../components/ImportPanel";
 import { PathCandidates } from "../components/PathCandidates";
+import { useListHotkeys } from "../hooks/useListHotkeys";
 import { buildDestinations } from "../import-destinations";
 import { modeToScope, toolLabel, type Mode, type SkillTool } from "../nav";
 
@@ -76,6 +77,7 @@ export function SkillsListView({
   const [importing, setImporting] = useState(false);
   const [fromGit, setFromGit] = useState(false);
   const idInputRef = useRef<HTMLInputElement>(null);
+  const filterRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (creating) idInputRef.current?.focus();
@@ -141,10 +143,29 @@ export function SkillsListView({
     });
   }
 
-  function clearSelection() {
+  const clearSelection = useCallback(() => {
     setSelected(new Set());
     setImporting(false);
-  }
+  }, []);
+
+  const openHotkeyTarget = useCallback(() => {
+    const row = selectedRows[0] ?? visible[0];
+    if (row) onOpen(row);
+  }, [selectedRows, visible, onOpen]);
+
+  useListHotkeys({
+    enabled: !creating && !fromGit,
+    filterRef,
+    onNew: () => {
+      setFromGit(false);
+      setCreating(true);
+    },
+    onClearSelection: clearSelection,
+    onClearFilter: () => setQuery(""),
+    hasFilter: Boolean(query.trim()),
+    hasSelection: selected.size > 0,
+    onOpen: openHotkeyTarget,
+  });
 
   return (
     <section className="panel">
@@ -154,19 +175,22 @@ export function SkillsListView({
           <span className={`badge scope-${mode}`}>{mode}</span>
           <span className="muted" style={{ fontWeight: 400, fontSize: "0.85rem" }}>
             {skills.length} item{skills.length === 1 ? "" : "s"}
+            <span className="hotkey-hint" title="Keyboard shortcuts">
+              {" "}
+              · / filter · n new · ↵ open · esc clear
+            </span>
           </span>
         </h2>
         <div className="list-tools">
-          {skills.length > 0 && (
-            <input
-              className="search-input"
-              type="search"
-              aria-label="Filter skills"
-              placeholder="Filter…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          )}
+          <input
+            ref={filterRef}
+            className="search-input"
+            type="search"
+            aria-label="Filter skills"
+            placeholder="Filter… (/)"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
           <button
             type="button"
             className={fromGit ? undefined : "ghost"}
@@ -313,6 +337,8 @@ export function SkillsListView({
             destinations={destinations}
             projectRootSet={projectRootSet}
             busy={busy}
+            sourceTool={tool}
+            sourceMode={mode}
             pathIdHint="<id>"
             showSkillColumn
             blurb={`Copy ${selectedSources.length} skill${selectedSources.length === 1 ? "" : "s"} to other tools and/or the other scope. Preview shows exactly what would happen before anything is written.`}

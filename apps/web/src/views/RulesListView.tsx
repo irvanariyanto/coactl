@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Rule, RuleImportPlan, RuleImportResult, RuleTool, ScopeMode, Workspace } from "../api";
 import { EmptyResourceState } from "../components/EmptyResourceState";
 import { ImportPanel } from "../components/ImportPanel";
 import { PathCandidates } from "../components/PathCandidates";
+import { useListHotkeys } from "../hooks/useListHotkeys";
 import { buildRuleDestinations } from "../import-destinations";
 import { formatRuleDestPath, toolLabel, type Mode } from "../nav";
 
@@ -53,6 +54,7 @@ export function RulesListView({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
   const idInputRef = useRef<HTMLInputElement>(null);
+  const filterRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (creating && !singleton) idInputRef.current?.focus();
@@ -115,10 +117,28 @@ export function RulesListView({
     });
   }
 
-  function clearSelection() {
+  const clearSelection = useCallback(() => {
     setSelected(new Set());
     setImporting(false);
-  }
+  }, []);
+
+  const openHotkeyTarget = useCallback(() => {
+    const row = selectedRows[0] ?? visible[0];
+    if (row) onOpen(row);
+  }, [selectedRows, visible, onOpen]);
+
+  useListHotkeys({
+    enabled: !creating,
+    filterRef,
+    onNew: () => {
+      if (!singletonExists) setCreating(true);
+    },
+    onClearSelection: clearSelection,
+    onClearFilter: () => setQuery(""),
+    hasFilter: Boolean(query.trim()),
+    hasSelection: selected.size > 0,
+    onOpen: openHotkeyTarget,
+  });
 
   return (
     <section className="panel">
@@ -128,19 +148,22 @@ export function RulesListView({
           <span className={`badge scope-${mode}`}>{mode}</span>
           <span className="muted" style={{ fontWeight: 400, fontSize: "0.85rem" }}>
             {rules.length} item{rules.length === 1 ? "" : "s"}
+            <span className="hotkey-hint" title="Keyboard shortcuts">
+              {" "}
+              · / filter · n new · ↵ open · esc clear
+            </span>
           </span>
         </h2>
         <div className="list-tools">
-          {rules.length > 1 && (
-            <input
-              className="search-input"
-              type="search"
-              aria-label="Filter rules"
-              placeholder="Filter…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          )}
+          <input
+            ref={filterRef}
+            className="search-input"
+            type="search"
+            aria-label="Filter rules"
+            placeholder="Filter… (/)"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
           {!creating && !singletonExists && (
             <button className="primary" type="button" onClick={() => setCreating(true)}>
               {singleton ? "+ Create instruction file" : "+ New rule"}
@@ -248,6 +271,8 @@ export function RulesListView({
             destinations={destinations}
             projectRootSet={projectRootSet}
             busy={busy}
+            sourceTool={tool}
+            sourceMode={mode}
             pathIdHint="<id>"
             formatDestPath={(dir, idHint, t) =>
               formatRuleDestPath(dir, idHint, t, workspace.ruleLayoutsByTool[t])
