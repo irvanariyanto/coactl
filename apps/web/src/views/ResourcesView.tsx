@@ -60,11 +60,11 @@ export function ResourcesView({
     ? commandKind === "workflow"
       ? `${commandCount} workflow file${commandCount === 1 ? "" : "s"} (.md)`
       : `${commandCount} command file${commandCount === 1 ? "" : "s"} (.md)`
-    : "Coming soon";
+    : `Not supported for ${toolLabel(tool)}`;
 
   const workflowBlurb = supportsWorkflows(tool)
     ? `${workflowCount} workflow script${workflowCount === 1 ? "" : "s"} (.js)`
-    : "Coming soon";
+    : `Not supported for ${toolLabel(tool)}`;
 
   const kinds = [
     {
@@ -149,7 +149,7 @@ export function ResourcesView({
             </span>
             {!kind.enabled && (
               <span className="badge-row">
-                <span className="badge">soon</span>
+                <span className="badge">not supported</span>
               </span>
             )}
           </button>
