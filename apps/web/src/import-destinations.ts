@@ -1,5 +1,5 @@
-import type { ScopeMode, Workspace } from "./api";
-import type { Mode, SkillTool } from "./nav";
+import type { RuleTool, ScopeMode, SkillTool, Workspace } from "./api";
+import type { Mode } from "./nav";
 
 export interface ImportDestination {
   key: string;
@@ -35,6 +35,35 @@ export function buildDestinations(
         scope,
         installed: t.installed,
         // Imports write to the preferred (always writable) location.
+        path: info?.preferred ?? "",
+      });
+    }
+  }
+  return out;
+}
+
+/** Rule import targets are limited to tools with native rule dirs (cursor, claude-code). */
+export function buildRuleDestinations(
+  sourceTool: RuleTool,
+  sourceMode: Mode,
+  workspace: Workspace,
+  projectRootSet: boolean,
+): ImportDestination[] {
+  const scopes: ScopeMode[] = projectRootSet ? ["global", "project"] : ["global"];
+  const out: ImportDestination[] = [];
+  for (const tool of workspace.ruleToolsAvailable) {
+    for (const scope of scopes) {
+      if (tool === sourceTool && scope === sourceMode) continue;
+      const info =
+        scope === "project"
+          ? workspace.rulePathsByTool[tool]?.project
+          : workspace.rulePathsByTool[tool]?.global;
+      const skillInfo = workspace.skillTools.find((t) => t.target === tool);
+      out.push({
+        key: `${tool}:${scope}`,
+        tool,
+        scope,
+        installed: skillInfo?.installed ?? false,
         path: info?.preferred ?? "",
       });
     }

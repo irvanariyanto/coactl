@@ -46,7 +46,7 @@ Developers use multiple AI coding assistants (Claude Code, Cursor, Codex, Gemini
 - Full multi-kind parity (rules, commands, workflows) before skills polish is done
 - Remote skill packs (git/npm/url sources) from the legacy CLI
 - Multi-user SaaS / remote hosting
-- Editing non-skill resources (rules, AGENTS.md aggregates, etc.) until Phase B
+- Editing Commands / Workflows / AGENTS.md aggregates until later Phase B work (Rules MVP is in)
 
 ---
 
@@ -67,7 +67,7 @@ Developers use multiple AI coding assistants (Claude Code, Cursor, Codex, Gemini
 3. **Paths visible** — every screen that lists tools/resources shows the resolved path.
 4. **Detect from valid sources** — path candidates come from env vars + observed official locations; prefer existing dirs on disk.
 5. **Safe copy** — import preserves raw `SKILL.md` contents; overwrite is opt-in and previewed.
-6. **Skills-done before breadth** — polish skills UX before shipping Rules / Commands / Workflows.
+6. **Skills-done before breadth** — skills polished first; Rules MVP next; Commands / Workflows after.
 7. **Vendor dirs are constrained** — some locations are readable/importable but not writable (see §13).
 
 ---
@@ -85,14 +85,17 @@ Home
                                           ▼
                                        Tools
                                           ▼
-                                    Skills list
+                         Resources hub (Cursor / Claude Code)
+                         or Skills list (other tools)
+                                          ▼
+                          Skills list  |  Rules list
                               (bulk delete / import)
                                           ▼
-                                   Skill detail
+                          Skill detail  |  Rule detail
                               (edit / delete / import)
 
-Optional deep link: Tools → Resources hub
-(Rules/Commands/Workflows = Phase B; primary UI soft-skips to Skills)
+Tools with Rules support open the Resources hub; others soft-skip to Skills.
+Commands / Workflows remain Phase B (later).
 ```
 
 ### 6.2 Modes
@@ -108,10 +111,12 @@ Optional deep link: Tools → Resources hub
 |--------|----------------|
 | Mode home | Two clear choices: Global / Project |
 | Project gate | Prefer **Continue** on the active root; recent projects secondary; typed path + Browse for new folders; persist root + up to 8 recents in `localStorage` |
-| Tools | Cards with skill count, primary path (+N alternates hint), installed / in-project / path-ok badges; click opens **Skills** (soft-skip Resources) |
-| Resources | Optional hub (`#/{mode}/{tool}`) for Phase B kinds; Skills enabled; others “Coming soon”; collapsible scanned paths |
-| Skills list | Card grid with filter; one path banner + collapsible candidates; inline create; multi-select bulk delete / import (shared preview panel with overwrite diff) |
-| Skill detail | Edit full `SKILL.md`; save/delete; same import panel as bulk (preview → apply, View diff on overwrite) |
+| Tools | Cards with skill + rule counts; click opens **Resources** hub |
+| Resources | Hub (`#/{mode}/{tool}`): Skills + Rules for every tool; Commands/Workflows “Coming soon” |
+| Skills list | Card grid with filter; path banner; inline create; multi-select bulk delete / import |
+| Skill detail | Edit full `SKILL.md`; save/delete; import preview → apply |
+| Rules list | Multi-file rule cards or singleton instruction file (`AGENTS.md` / `GEMINI.md`) |
+| Rule detail | Edit rule/instruction file; import across tools/scopes (id mapping for multi ↔ singleton) |
 
 ### 6.4 Navigation
 
@@ -189,16 +194,18 @@ Skill id: kebab-case (`^[a-z0-9]+(-[a-z0-9]+)*$`).
 
 API must reject writes into read-only roots with a clear error.
 
-### 7.6 Future resource kinds — **Phase B (next)**
+### 7.6 Resource kinds
 
 | Kind | Status |
 |------|--------|
 | Skills | Done (+ Phase A polish) |
-| Rules | Phase B |
-| Commands | Phase B |
-| Workflows | Phase B |
+| Rules | **Shipped** for all skill tools (multi-file dirs + AGENTS/GEMINI singletons) |
+| Commands | Phase B (later) |
+| Workflows | Phase B (later) |
 
-When added, they must follow the same principles: native paths, Global/Project split, visible paths, import across tools/scopes, duplicate + read-only policy.
+Rules principles: native paths, Global/Project split, visible paths, import across tools/scopes with dry-run preview.
+
+**Multi-file** tools use kebab-case ids under a rules dir. **Singleton** tools manage one instruction file (`AGENTS.md` / `GEMINI.md`) with a fixed id (`agents` / `gemini`). Cross-shape import maps ids (e.g. multi → `agents`, singleton → `agents-md`).
 
 ---
 
@@ -219,6 +226,18 @@ Paths are resolved at runtime; this table documents intended sources of truth.
 Skill file shape: `<skillsDir>/<id>/SKILL.md`.  
 (**RO** = read-only / import-from only.)
 
+### 8.1 Rules / instructions path matrix
+
+| Tool | Shape | Project | Global | File(s) |
+|------|-------|---------|--------|---------|
+| Cursor | multi | `<root>/.cursor/rules` | `~/.cursor/rules` | `<id>.mdc` |
+| Claude Code | multi | `<root>/.claude/rules` | `~/.claude/rules` | `<id>.md` |
+| OpenCode | multi | `<root>/.opencode/rules` | `~/.config/opencode/rules` (+ env) | `<id>.md` (list `.mdc` too) |
+| Antigravity | multi | `<root>/.agents/rules` (+ `.agent/rules` legacy) | `$ANTIGRAVITY_HOME/rules` | `<id>.md` (list `.mdc` too) |
+| Codex | singleton | `<root>/AGENTS.md` | `$CODEX_HOME/AGENTS.md` | fixed id `agents` |
+| Zed | singleton | `<root>/AGENTS.md` | `$ZED_HOME/AGENTS.md` | fixed id `agents` (same project file as Codex) |
+| Gemini | singleton | `<root>/GEMINI.md` | `$GEMINI_HOME/GEMINI.md` | fixed id `gemini` |
+
 ---
 
 ## 9. Architecture
@@ -229,8 +248,8 @@ Browser (Vite + React)  --HTTP JSON-->  Hono API (127.0.0.1:8787)
                                               v
                                        @coactl/domain
                                        - detect tools
-                                       - resolve skill paths
-                                       - list/save/delete/import skills
+                                       - resolve skill + rule paths
+                                       - list/save/delete/import skills & rules
                                               |
                                               v
                                          Local filesystem
@@ -240,7 +259,7 @@ Browser (Vite + React)  --HTTP JSON-->  Hono API (127.0.0.1:8787)
 |---------|----------------|
 | `apps/web` | Drill-down UI |
 | `apps/server` | Local REST API, localhost bind only |
-| `packages/domain` | Detection, path resolution, skill IO |
+| `packages/domain` | Detection, path resolution, skill + rule IO |
 
 **Runtime:** Node ≥ 20, TypeScript ESM monorepo.
 
@@ -263,8 +282,8 @@ Common query: `root` (absolute project path; used for project scope and path res
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/api/health` | `{ ok, version, focus: "skills" }` |
-| GET | `/api/workspace?mode=global\|project&root=` | Tools, counts, resolved paths incl. per-candidate `writable`/`exists` |
+| GET | `/api/health` | `{ ok, version, focus: "skills+rules" }` |
+| GET | `/api/workspace?mode=global\|project&root=` | Tools, skill/rule counts, resolved skill + rule paths (`writable`/`exists`) |
 | GET | `/api/skills?tool=&scope=` | List skills (one row per physical path; `readOnly` flag) |
 | GET | `/api/skills/:tool/:id?scope=&path=` | Read one skill (`path` disambiguates duplicates) |
 | POST | `/api/skills` | Create (preferred writable dir) |
@@ -272,6 +291,13 @@ Common query: `root` (absolute project path; used for project scope and path res
 | DELETE | `/api/skills/:tool/:id?scope=&path=` | Delete (`403` on read-only) |
 | POST | `/api/skills/scaffold` | Scaffold template; optional `save` |
 | POST | `/api/skills/import` | Cross-tool / cross-scope copy; `dryRun` returns plan without writing |
+| GET | `/api/rules?tool=&scope=` | List rules (flat files; Cursor + Claude Code) |
+| GET | `/api/rules/:tool/:id?scope=&path=` | Read one rule |
+| POST | `/api/rules` | Create rule file in preferred dir |
+| PUT | `/api/rules/:tool/:id` | Update rule |
+| DELETE | `/api/rules/:tool/:id?scope=&path=` | Delete rule file |
+| POST | `/api/rules/scaffold` | Scaffold template; optional `save` |
+| POST | `/api/rules/import` | Cross-tool / cross-scope copy; `dryRun` previews |
 | POST | `/api/pick-folder` | Native OS folder dialog; returns absolute path |
 
 ### Import request
@@ -334,13 +360,13 @@ Exit criteria met: skills feel trustworthy for daily Global ↔ Project / cross-
 
 ### Phase B — More resource kinds
 
-1. **Rules** — native rule dirs per tool (highest value after skills)  
+1. **Rules** — **shipped** for all skill tools (multi-file + AGENTS/GEMINI)  
 2. **Commands** — where tools support slash commands  
 3. **Workflows** — Claude-native first  
 
 ### Phase C — Nice-to-have
 
-1. Deep links / router — **shipped** (URL hash; soft-skip Resources in primary flow)  
+1. Deep links / router — **shipped** (URL hash; Resources hub for rule-capable tools)  
 2. Richer diff UI for import overwrite — **partial** (unified View diff on single + bulk overwrite; side-by-side still optional)  
 3. Optional revival of legacy remote sources **only** if they still write native dirs (no `.coactl` registry)
 
@@ -364,7 +390,7 @@ Legacy CLI capabilities (lockfile, drift sync from `.coactl`) remain archived un
 coactl/
   apps/web/           # Vite + React UI
   apps/server/        # Hono local API
-  packages/domain/    # detect, skill-paths, skills IO
+  packages/domain/    # detect, skill/rule paths + IO
   README.md
   docs/PRD.md         # this document
 ```

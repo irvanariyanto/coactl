@@ -7,19 +7,46 @@ interface Props {
   tool: SkillTool;
   workspace: Workspace;
   onSelectSkills: () => void;
+  onSelectRules: () => void;
 }
 
-const KINDS = [
-  { id: "skills", label: "Skills", enabled: true, blurb: "SKILL.md folders for this tool" },
-  { id: "rules", label: "Rules", enabled: false, blurb: "Coming soon" },
-  { id: "commands", label: "Commands", enabled: false, blurb: "Coming soon" },
-  { id: "workflows", label: "Workflows", enabled: false, blurb: "Coming soon" },
-] as const;
+/** Hub for resource kinds — Skills + Rules for every skill-capable tool. */
+export function ResourcesView({ mode, tool, workspace, onSelectSkills, onSelectRules }: Props) {
+  const skillPaths = workspace.skillPathsByTool[tool];
+  const rulePaths = workspace.rulePathsByTool[tool];
+  const layout = workspace.ruleLayoutsByTool[tool];
+  const activeSkills = mode === "global" ? skillPaths?.global : skillPaths?.project;
+  const activeRules = mode === "global" ? rulePaths?.global : rulePaths?.project;
+  const skillCount =
+    mode === "global"
+      ? workspace.toolSkillCounts[tool]?.global ?? 0
+      : workspace.toolSkillCounts[tool]?.project ?? 0;
+  const ruleCount =
+    mode === "global"
+      ? workspace.toolRuleCounts[tool]?.global ?? 0
+      : workspace.toolRuleCounts[tool]?.project ?? 0;
 
-/** Kept for Phase B deep links (`#/{mode}/{tool}`); primary flow soft-skips to Skills. */
-export function ResourcesView({ mode, tool, workspace, onSelectSkills }: Props) {
-  const paths = workspace.skillPathsByTool[tool];
-  const active = mode === "global" ? paths?.global : paths?.project;
+  const ruleBlurb =
+    layout?.shape === "singleton"
+      ? `${ruleCount ? "1" : "0"} instruction file (${tool === "gemini" ? "GEMINI.md" : "AGENTS.md"})`
+      : `${ruleCount} rule file${ruleCount === 1 ? "" : "s"} (.${layout?.extension ?? "md"})`;
+
+  const kinds = [
+    {
+      id: "skills" as const,
+      label: "Skills",
+      enabled: true,
+      blurb: `${skillCount} SKILL.md folder${skillCount === 1 ? "" : "s"} for this tool`,
+    },
+    {
+      id: "rules" as const,
+      label: "Rules",
+      enabled: true,
+      blurb: ruleBlurb,
+    },
+    { id: "commands" as const, label: "Commands", enabled: false, blurb: "Coming soon" },
+    { id: "workflows" as const, label: "Workflows", enabled: false, blurb: "Coming soon" },
+  ];
 
   return (
     <section className="panel">
@@ -28,12 +55,20 @@ export function ResourcesView({ mode, tool, workspace, onSelectSkills }: Props) 
         <span className={`badge scope-${mode}`}>{mode}</span>
       </h2>
       <p className="panel-sub">
-        Skills are available now. Other resource kinds will land here in a later phase — for daily
-        use, open Skills directly from the tools list.
+        Pick a resource kind. Skills and Rules write to each tool&apos;s native folders or instruction
+        files — no separate registry.
       </p>
-      {active && <PathCandidates info={active} label="Active skills path" />}
+      {activeSkills && <PathCandidates info={activeSkills} label="Active skills path" />}
+      {activeRules && (
+        <div style={{ marginTop: "0.65rem" }}>
+          <PathCandidates
+            info={activeRules}
+            label={layout?.shape === "singleton" ? "Active instruction file" : "Active rules path"}
+          />
+        </div>
+      )}
       <div className="tool-grid" style={{ marginTop: "1rem" }}>
-        {KINDS.map((kind) => (
+        {kinds.map((kind) => (
           <button
             key={kind.id}
             type="button"
@@ -41,6 +76,7 @@ export function ResourcesView({ mode, tool, workspace, onSelectSkills }: Props) 
             disabled={!kind.enabled}
             onClick={() => {
               if (kind.id === "skills") onSelectSkills();
+              if (kind.id === "rules") onSelectRules();
             }}
           >
             <span className="tool-card-head">

@@ -10,6 +10,17 @@ export type SkillTool =
   | "opencode"
   | "zed";
 
+export type RuleTool = SkillTool;
+
+export type RuleShape = "multi" | "singleton";
+
+export interface RuleLayoutInfo {
+  shape: RuleShape;
+  extension: "mdc" | "md";
+  singletonId?: string;
+  listExtensions: Array<"mdc" | "md">;
+}
+
 export interface SkillToolInfo {
   target: SkillTool;
   installed: boolean;
@@ -30,6 +41,20 @@ export interface Skill {
   readOnly: boolean;
 }
 
+export interface Rule {
+  id: string;
+  tool: RuleTool;
+  scope: ScopeMode;
+  name: string;
+  description: string;
+  filePath: string;
+  body: string;
+  contents: string;
+  extension: "mdc" | "md";
+  shape: RuleShape;
+  readOnly: boolean;
+}
+
 export interface SkillPathCandidate {
   path: string;
   exists: boolean;
@@ -44,14 +69,20 @@ export interface SkillPathInfo {
   candidateDetails: SkillPathCandidate[];
 }
 
+export type RulePathInfo = SkillPathInfo;
+
 export interface Workspace {
   projectRoot: string;
   mode: Mode;
   skillTools: SkillToolInfo[];
   toolsForMode: SkillToolInfo[];
   toolSkillCounts: Record<SkillTool, { project: number; global: number }>;
+  toolRuleCounts: Record<RuleTool, { project: number; global: number }>;
   skillPathsByTool: Record<SkillTool, { project: SkillPathInfo; global: SkillPathInfo }>;
+  rulePathsByTool: Record<RuleTool, { project: RulePathInfo; global: RulePathInfo }>;
   skillToolsAvailable: SkillTool[];
+  ruleToolsAvailable: RuleTool[];
+  ruleLayoutsByTool: Record<RuleTool, RuleLayoutInfo>;
 }
 
 export interface ImportResult {
@@ -68,6 +99,30 @@ export interface ImportResult {
 export interface ImportPlan {
   plan: Array<{
     tool: SkillTool;
+    scope: ScopeMode;
+    id: string;
+    filePath: string;
+    exists: boolean;
+    action: "write" | "overwrite" | "skip" | "error";
+    reason?: string;
+    existingContents?: string;
+  }>;
+}
+
+export interface RuleImportResult {
+  results: Array<{
+    tool: RuleTool;
+    scope: ScopeMode;
+    id: string;
+    status: "written" | "skipped" | "error";
+    error?: string;
+    filePath?: string;
+  }>;
+}
+
+export interface RuleImportPlan {
+  plan: Array<{
+    tool: RuleTool;
     scope: ScopeMode;
     id: string;
     filePath: string;
@@ -168,6 +223,76 @@ export const api = {
     },
   ) {
     return request<ImportPlan>(`/api/skills/import${qs(root)}`, {
+      method: "POST",
+      body: JSON.stringify({ ...body, dryRun: true }),
+    });
+  },
+  listRules(root: string, tool: RuleTool, scope: ScopeMode) {
+    return request<{ rules: Rule[] }>(`/api/rules${qs(root, { tool, scope })}`);
+  },
+  getRule(root: string, tool: RuleTool, id: string, scope: ScopeMode, path?: string) {
+    return request<{ rule: Rule }>(
+      `/api/rules/${tool}/${id}${qs(root, { scope, ...(path ? { path } : {}) })}`,
+    );
+  },
+  saveRule(
+    root: string,
+    rule: {
+      tool: RuleTool;
+      scope: ScopeMode;
+      id: string;
+      contents?: string;
+      filePath?: string;
+    },
+    create: boolean,
+  ) {
+    if (create) {
+      return request<{ rule: Rule }>(`/api/rules${qs(root)}`, {
+        method: "POST",
+        body: JSON.stringify(rule),
+      });
+    }
+    return request<{ rule: Rule }>(`/api/rules/${rule.tool}/${rule.id}${qs(root)}`, {
+      method: "PUT",
+      body: JSON.stringify(rule),
+    });
+  },
+  deleteRule(root: string, tool: RuleTool, id: string, scope: ScopeMode, path?: string) {
+    return request(`/api/rules/${tool}/${id}${qs(root, { scope, ...(path ? { path } : {}) })}`, {
+      method: "DELETE",
+    });
+  },
+  scaffoldRule(
+    root: string,
+    body: { id: string; tool: RuleTool; scope: ScopeMode; description?: string; save?: boolean },
+  ) {
+    return request<{ rule: Rule }>(`/api/rules/scaffold${qs(root)}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+  importRule(
+    root: string,
+    body: {
+      source: { tool: RuleTool; scope: ScopeMode; id: string };
+      targets: Array<{ tool: RuleTool; scope: ScopeMode }>;
+      overwrite?: boolean;
+    },
+  ) {
+    return request<RuleImportResult>(`/api/rules/import${qs(root)}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+  previewRuleImport(
+    root: string,
+    body: {
+      source: { tool: RuleTool; scope: ScopeMode; id: string };
+      targets: Array<{ tool: RuleTool; scope: ScopeMode }>;
+      overwrite?: boolean;
+    },
+  ) {
+    return request<RuleImportPlan>(`/api/rules/import${qs(root)}`, {
       method: "POST",
       body: JSON.stringify({ ...body, dryRun: true }),
     });

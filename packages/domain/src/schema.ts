@@ -45,3 +45,29 @@ export interface SkillRecord extends SkillMeta {
   /** True when the skill lives in a vendor-managed dir (list/import-from only). */
   readOnly: boolean;
 }
+
+/**
+ * Tools with native rules / instruction files.
+ * Same set as skill tools — each has a documented rules or AGENTS/GEMINI path.
+ */
+export const RULE_TOOLS = SKILL_TOOLS;
+export type RuleTool = SkillTool;
+
+/** Multi-file rule dirs vs single instruction files (AGENTS.md / GEMINI.md). */
+export type RuleShape = "multi" | "singleton";
+
+export interface RuleRecord {
+  id: string;
+  tool: RuleTool;
+  scope: ScopeMode;
+  /** Display title (from frontmatter description/name or id). */
+  name: string;
+  description: string;
+  filePath: string;
+  contents: string;
+  body: string;
+  /** File extension without dot: mdc | md */
+  extension: "mdc" | "md";
+  shape: RuleShape;
+  readOnly: boolean;
+}

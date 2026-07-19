@@ -45,7 +45,8 @@ export function ToolsView({
         )}
       </div>
       <p className="panel-sub">
-        Open a tool to manage its skills. Paths resolve from each tool&apos;s native skill folders.
+        Open a tool to choose Skills or Rules. Paths resolve from each tool&apos;s native folders /
+        instruction files.
       </p>
       <div className="tool-grid">
         {tools.map((tool) => {
@@ -53,6 +54,10 @@ export function ToolsView({
             mode === "global"
               ? workspace.toolSkillCounts[tool.target]?.global ?? 0
               : workspace.toolSkillCounts[tool.target]?.project ?? 0;
+          const ruleCount =
+            mode === "global"
+              ? workspace.toolRuleCounts[tool.target]?.global ?? 0
+              : workspace.toolRuleCounts[tool.target]?.project ?? 0;
           const info =
             mode === "global"
               ? workspace.skillPathsByTool[tool.target]?.global
@@ -71,7 +76,8 @@ export function ToolsView({
                 <span>
                   <strong>{toolLabel(tool.target)}</strong>
                   <span className="tool-count" style={{ display: "block" }}>
-                    {count} skill{count === 1 ? "" : "s"} · {mode}
+                    {count} skill{count === 1 ? "" : "s"} · {ruleCount} rule
+                    {ruleCount === 1 ? "" : "s"} · {mode}
                   </span>
                 </span>
               </span>

@@ -3,17 +3,29 @@ import { cors } from "hono/cors";
 import { execFile } from "node:child_process";
 import { resolve } from "node:path";
 import {
+  RULE_TOOLS,
   SKILL_TOOLS,
+  countRulesByTool,
   countSkillsByTool,
+  deleteRule,
   deleteSkill,
   detectSkillTools,
+  getRule,
   getSkill,
+  importRule,
   importSkill,
+  listRules,
   listSkills,
+  planImportRule,
   planImportSkill,
+  resolveAllRulePaths,
   resolveAllSkillPaths,
+  ruleLayoutInfo,
+  saveRule,
   saveSkill,
+  scaffoldRule,
   scaffoldSkill,
+  type RuleTool,
   type ScopeMode,
   type SkillTool,
 } from "@coactl/domain";
@@ -38,14 +50,16 @@ app.use("/api/*", async (c, next) => {
   await next();
 });
 
-app.get("/api/health", (c) => c.json({ ok: true, version: "0.2.1", focus: "skills" }));
+app.get("/api/health", (c) => c.json({ ok: true, version: "0.2.1", focus: "skills+rules" }));
 
 app.get("/api/workspace", (c) => {
   const projectRoot = c.get("projectRoot");
   const mode = (c.req.query("mode") === "project" ? "project" : "global") as ScopeMode;
   const skillTools = detectSkillTools(projectRoot);
   const counts = countSkillsByTool(projectRoot);
+  const ruleCounts = countRulesByTool(projectRoot);
   const resolved = resolveAllSkillPaths(projectRoot);
+  const ruleResolved = resolveAllRulePaths(projectRoot);
 
   const skillPathsByTool = Object.fromEntries(
     SKILL_TOOLS.map((tool) => [
@@ -69,6 +83,28 @@ app.get("/api/workspace", (c) => {
     ]),
   );
 
+  const rulePathsByTool = Object.fromEntries(
+    RULE_TOOLS.map((tool) => [
+      tool,
+      {
+        project: {
+          path: ruleResolved[tool].project.path,
+          preferred: ruleResolved[tool].project.preferred,
+          exists: ruleResolved[tool].project.exists,
+          candidates: ruleResolved[tool].project.candidates,
+          candidateDetails: ruleResolved[tool].project.candidateDetails,
+        },
+        global: {
+          path: ruleResolved[tool].global.path,
+          preferred: ruleResolved[tool].global.preferred,
+          exists: ruleResolved[tool].global.exists,
+          candidates: ruleResolved[tool].global.candidates,
+          candidateDetails: ruleResolved[tool].global.candidateDetails,
+        },
+      },
+    ]),
+  );
+
   const toolsForMode =
     mode === "global"
       ? skillTools.filter((t) => t.installed)
@@ -80,8 +116,12 @@ app.get("/api/workspace", (c) => {
     skillTools,
     toolsForMode,
     toolSkillCounts: counts,
+    toolRuleCounts: ruleCounts,
     skillPathsByTool,
+    rulePathsByTool,
     skillToolsAvailable: SKILL_TOOLS,
+    ruleToolsAvailable: RULE_TOOLS,
+    ruleLayoutsByTool: Object.fromEntries(RULE_TOOLS.map((tool) => [tool, ruleLayoutInfo(tool)])),
   });
 });
 
@@ -271,6 +311,202 @@ app.post("/api/skills/import", async (c) => {
       return c.json(planImportSkill(options));
     }
     return c.json(importSkill(options));
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 404);
+  }
+});
+
+function serializeRule(r: {
+  id: string;
+  tool: RuleTool;
+  scope: ScopeMode;
+  name: string;
+  description: string;
+  filePath: string;
+  body: string;
+  contents: string;
+  extension: "mdc" | "md";
+  shape: "multi" | "singleton";
+  readOnly: boolean;
+}) {
+  return {
+    id: r.id,
+    tool: r.tool,
+    scope: r.scope,
+    name: r.name,
+    description: r.description,
+    filePath: r.filePath,
+    body: r.body,
+    contents: r.contents,
+    extension: r.extension,
+    shape: r.shape,
+    readOnly: r.readOnly,
+  };
+}
+
+app.get("/api/rules", (c) => {
+  const projectRoot = c.get("projectRoot");
+  const tool = c.req.query("tool") as RuleTool | undefined;
+  const scope = (c.req.query("scope") === "global" ? "global" : "project") as ScopeMode;
+
+  if (tool && !(RULE_TOOLS as readonly string[]).includes(tool)) {
+    return c.json({ error: `Unsupported rule tool: ${tool}` }, 400);
+  }
+
+  const rules = listRules({ projectRoot, tool, scope }).map(serializeRule);
+  return c.json({ rules });
+});
+
+app.get("/api/rules/:tool/:id", (c) => {
+  const tool = c.req.param("tool") as RuleTool;
+  const id = c.req.param("id");
+  const scope = (c.req.query("scope") === "global" ? "global" : "project") as ScopeMode;
+  const path = c.req.query("path") || undefined;
+
+  if (!(RULE_TOOLS as readonly string[]).includes(tool)) {
+    return c.json({ error: `Unsupported rule tool: ${tool}` }, 400);
+  }
+
+  const rule = getRule(c.get("projectRoot"), tool, id, scope, {}, path);
+  if (!rule) return c.json({ error: "Rule not found" }, 404);
+  return c.json({ rule: serializeRule(rule) });
+});
+
+const RuleUpsertSchema = z.object({
+  tool: z.enum(RULE_TOOLS),
+  scope: z.enum(["project", "global"]),
+  id: z.string(),
+  description: z.string().optional(),
+  body: z.string().optional(),
+  contents: z.string().optional(),
+  filePath: z.string().optional(),
+});
+
+app.post("/api/rules", async (c) => {
+  const body = RuleUpsertSchema.parse(await c.req.json());
+  const existing = getRule(c.get("projectRoot"), body.tool, body.id, body.scope);
+  if (existing) return c.json({ error: `Rule already exists: ${body.tool}/${body.id}` }, 409);
+
+  try {
+    const rule = saveRule({
+      projectRoot: c.get("projectRoot"),
+      ...body,
+    });
+    return c.json({ rule: serializeRule(rule) }, 201);
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 400);
+  }
+});
+
+app.put("/api/rules/:tool/:id", async (c) => {
+  const tool = c.req.param("tool") as RuleTool;
+  const id = c.req.param("id");
+  const body = RuleUpsertSchema.omit({ tool: true, id: true })
+    .extend({
+      tool: z.enum(RULE_TOOLS).optional(),
+      id: z.string().optional(),
+    })
+    .parse(await c.req.json());
+
+  if (!(RULE_TOOLS as readonly string[]).includes(tool)) {
+    return c.json({ error: `Unsupported rule tool: ${tool}` }, 400);
+  }
+
+  try {
+    const rule = saveRule({
+      projectRoot: c.get("projectRoot"),
+      tool,
+      id,
+      scope: body.scope,
+      description: body.description,
+      body: body.body,
+      contents: body.contents,
+      filePath: body.filePath,
+    });
+    return c.json({ rule: serializeRule(rule) });
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 400);
+  }
+});
+
+app.delete("/api/rules/:tool/:id", (c) => {
+  const tool = c.req.param("tool") as RuleTool;
+  const id = c.req.param("id");
+  const scope = (c.req.query("scope") === "global" ? "global" : "project") as ScopeMode;
+  const path = c.req.query("path") || undefined;
+
+  if (!(RULE_TOOLS as readonly string[]).includes(tool)) {
+    return c.json({ error: `Unsupported rule tool: ${tool}` }, 400);
+  }
+
+  try {
+    const ok = deleteRule(c.get("projectRoot"), tool, id, scope, {}, path);
+    if (!ok) return c.json({ error: "Rule not found" }, 404);
+    return c.json({ ok: true });
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 400);
+  }
+});
+
+app.post("/api/rules/scaffold", async (c) => {
+  const body = z
+    .object({
+      id: z.string(),
+      description: z.string().optional(),
+      tool: z.enum(RULE_TOOLS),
+      scope: z.enum(["project", "global"]).default("project"),
+      save: z.boolean().optional(),
+    })
+    .parse(await c.req.json());
+
+  const scaffold = scaffoldRule(body.tool, body.id, body.description);
+  if (body.save) {
+    const rule = saveRule({
+      projectRoot: c.get("projectRoot"),
+      tool: body.tool,
+      scope: body.scope,
+      id: scaffold.id,
+      contents: scaffold.contents,
+    });
+    return c.json({ rule: serializeRule(rule) }, 201);
+  }
+  return c.json(scaffold);
+});
+
+app.post("/api/rules/import", async (c) => {
+  const body = z
+    .object({
+      source: z.object({
+        tool: z.enum(RULE_TOOLS),
+        scope: z.enum(["project", "global"]),
+        id: z.string(),
+      }),
+      targets: z
+        .array(
+          z.object({
+            tool: z.enum(RULE_TOOLS),
+            scope: z.enum(["project", "global"]),
+          }),
+        )
+        .min(1),
+      overwrite: z.boolean().optional(),
+      dryRun: z.boolean().optional(),
+    })
+    .parse(await c.req.json());
+
+  const dryRun = body.dryRun || c.req.query("dryRun") === "1";
+
+  try {
+    const options = {
+      projectRoot: c.get("projectRoot"),
+      source: body.source,
+      targets: body.targets,
+      overwrite: body.overwrite,
+    };
+    if (dryRun) {
+      return c.json(planImportRule(options));
+    }
+    return c.json(importRule(options));
   } catch (err) {
     return c.json({ error: (err as Error).message }, 404);
   }

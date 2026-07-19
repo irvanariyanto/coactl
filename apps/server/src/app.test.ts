@@ -38,7 +38,7 @@ describe("api basics", () => {
     expect(res.status).toBe(200);
     const body = await json(res);
     expect(body.ok).toBe(true);
-    expect(body.focus).toBe("skills");
+    expect(body.focus).toBe("skills+rules");
   });
 
   it("rejects unsupported tools with 400", async () => {
@@ -47,9 +47,32 @@ describe("api basics", () => {
       app.request(`/api/skills?root=${root}&tool=vscode&scope=project`),
       app.request(`/api/skills/vscode/some-skill?root=${root}&scope=project`),
       app.request(`/api/skills/vscode/some-skill?root=${root}&scope=project`, { method: "DELETE" }),
+      app.request(`/api/rules?root=${root}&tool=vscode&scope=project`),
+      app.request(`/api/rules/vscode/some-rule?root=${root}&scope=project`),
     ]) {
       expect((await req).status).toBe(400);
     }
+  });
+
+  it("includes rule metadata on workspace", async () => {
+    const root = tempRoot();
+    const res = await app.request(`/api/workspace?root=${root}&mode=project`);
+    expect(res.status).toBe(200);
+    const body = await json(res);
+    expect(body.ruleToolsAvailable).toEqual([
+      "claude-code",
+      "codex",
+      "cursor",
+      "antigravity",
+      "gemini",
+      "opencode",
+      "zed",
+    ]);
+    expect(body.ruleLayoutsByTool.codex.shape).toBe("singleton");
+    expect(body.ruleLayoutsByTool.cursor.shape).toBe("multi");
+    expect(body.rulePathsByTool.cursor.project.preferred).toContain(join(".cursor", "rules"));
+    expect(body.rulePathsByTool.codex.project.preferred).toContain("AGENTS.md");
+    expect(body.toolRuleCounts.cursor.project).toBe(0);
   });
 });
 
@@ -299,5 +322,97 @@ describe("import (A5)", () => {
       }),
     });
     expect(res.status).toBe(404);
+  });
+});
+
+describe("rules crud + import", () => {
+  it("creates, reads, updates, and deletes a cursor rule file", async () => {
+    const root = tempRoot();
+
+    const create = await app.request(`/api/rules?root=${root}`, {
+      method: "POST",
+      body: JSON.stringify({
+        tool: "cursor",
+        scope: "project",
+        id: "react-patterns",
+        description: "React patterns",
+        body: "# React\n\nPrefer hooks.\n",
+      }),
+    });
+    expect(create.status).toBe(201);
+    const created = await json(create);
+    expect(created.rule.filePath).toContain(join(".cursor", "rules", "react-patterns.mdc"));
+    expect(created.rule.extension).toBe("mdc");
+
+    const conflict = await app.request(`/api/rules?root=${root}`, {
+      method: "POST",
+      body: JSON.stringify({ tool: "cursor", scope: "project", id: "react-patterns", body: "x" }),
+    });
+    expect(conflict.status).toBe(409);
+
+    const get = await app.request(`/api/rules/cursor/react-patterns?root=${root}&scope=project`);
+    expect(get.status).toBe(200);
+    expect((await json(get)).rule.description).toContain("React");
+
+    const put = await app.request(`/api/rules/cursor/react-patterns?root=${root}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        scope: "project",
+        contents:
+          "---\ndescription: Updated\nalwaysApply: false\n---\n\n# Updated body\n",
+      }),
+    });
+    expect(put.status).toBe(200);
+    expect((await json(put)).rule.description).toBe("Updated");
+
+    const del = await app.request(`/api/rules/cursor/react-patterns?root=${root}&scope=project`, {
+      method: "DELETE",
+    });
+    expect(del.status).toBe(200);
+
+    const gone = await app.request(`/api/rules/cursor/react-patterns?root=${root}&scope=project`);
+    expect(gone.status).toBe(404);
+  });
+
+  it("imports across tools with dry-run preview", async () => {
+    const root = tempRoot();
+    await app.request(`/api/rules?root=${root}`, {
+      method: "POST",
+      body: JSON.stringify({
+        tool: "claude-code",
+        scope: "project",
+        id: "api-style",
+        description: "API style",
+        body: "# API\n\nUse REST.\n",
+      }),
+    });
+
+    const preview = await app.request(`/api/rules/import?root=${root}`, {
+      method: "POST",
+      body: JSON.stringify({
+        source: { tool: "claude-code", scope: "project", id: "api-style" },
+        targets: [
+          { tool: "cursor", scope: "project" },
+          { tool: "claude-code", scope: "project" },
+        ],
+        dryRun: true,
+      }),
+    });
+    const { plan } = await json(preview);
+    expect(plan[0].action).toBe("write");
+    expect(plan[0].filePath).toContain(join(".cursor", "rules", "api-style.mdc"));
+    expect(plan[1].action).toBe("skip");
+    expect(existsSync(plan[0].filePath)).toBe(false);
+
+    const apply = await app.request(`/api/rules/import?root=${root}`, {
+      method: "POST",
+      body: JSON.stringify({
+        source: { tool: "claude-code", scope: "project", id: "api-style" },
+        targets: [{ tool: "cursor", scope: "project" }],
+      }),
+    });
+    const { results } = await json(apply);
+    expect(results[0].status).toBe("written");
+    expect(readFileSync(results[0].filePath, "utf-8")).toContain("Use REST");
   });
 });

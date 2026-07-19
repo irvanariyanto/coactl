@@ -10,6 +10,8 @@ export interface ImportPanelProps {
   busy: boolean;
   /** Path suffix shown on each dest (e.g. "review-pr" or "<id>"). */
   pathIdHint: string;
+  /** How to append id onto a destination folder. Defaults to skill folders. */
+  formatDestPath?: (dir: string, idHint: string, tool: SkillTool) => string;
   blurb: string;
   showSkillColumn?: boolean;
   /** Incoming contents by skill id — used for overwrite diffs. */
@@ -24,11 +26,16 @@ export interface ImportPanelProps {
   ) => Promise<ImportResult["results"]>;
 }
 
+function defaultDestPath(dir: string, idHint: string): string {
+  return `${dir}/${idHint}/SKILL.md`;
+}
+
 export function ImportPanel({
   destinations,
   projectRootSet,
   busy,
   pathIdHint,
+  formatDestPath = (dir, idHint) => defaultDestPath(dir, idHint),
   blurb,
   showSkillColumn = false,
   incomingById,
@@ -97,8 +104,8 @@ export function ImportPanel({
             <span className={`badge scope-${d.scope}`}>{d.scope}</span>
             {d.installed && <span className="badge clean">installed</span>}
             {d.path && (
-              <code className="path-line" title={`${d.path}/${pathIdHint}/SKILL.md`}>
-                {d.path}/{pathIdHint}/SKILL.md
+              <code className="path-line" title={formatDestPath(d.path, pathIdHint, d.tool)}>
+                {formatDestPath(d.path, pathIdHint, d.tool)}
               </code>
             )}
           </label>

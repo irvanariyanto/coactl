@@ -1,5 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, type ImportPlan, type ImportResult, type ScopeMode, type Skill, type SkillTool, type Workspace } from "./api";
+import {
+  api,
+  type ImportPlan,
+  type ImportResult,
+  type Rule,
+  type RuleImportPlan,
+  type RuleImportResult,
+  type RuleTool,
+  type ScopeMode,
+  type Skill,
+  type SkillTool,
+  type Workspace,
+} from "./api";
 import { modeToScope, parseHash, toolLabel, viewToHash, type Mode, type View } from "./nav";
 import {
   forgetProject,
@@ -10,6 +22,8 @@ import {
 import { ModeHomeView } from "./views/ModeHomeView";
 import { ProjectGateView } from "./views/ProjectGateView";
 import { ResourcesView } from "./views/ResourcesView";
+import { RuleDetailView } from "./views/RuleDetailView";
+import { RulesListView } from "./views/RulesListView";
 import { SkillDetailView } from "./views/SkillDetailView";
 import { SkillsListView } from "./views/SkillsListView";
 import { ToolsView } from "./views/ToolsView";
@@ -20,20 +34,18 @@ interface Toast {
   text: string;
 }
 
-const UNSAVED_PROMPT = "You have unsaved changes to this skill. Discard them?";
+const UNSAVED_PROMPT = "You have unsaved changes. Discard them?";
 
 export function App() {
   const [root, setRoot] = useState(() => localStorage.getItem("coactl.root") || "");
   const [recent, setRecent] = useState<string[]>(() => {
     const list = loadRecentProjects();
     const current = localStorage.getItem("coactl.root")?.trim();
-    // Seed the list with the active root so the first switch has something useful.
     return current && !list.includes(current) ? rememberProject(current) : list;
   });
   const [view, setView] = useState<View>(() => {
     const fromHash = parseHash(window.location.hash);
     if (!fromHash) return { screen: "mode" };
-    // Deep links into Project mode need a root; fall back to the gate.
     if ("mode" in fromHash && fromHash.mode === "project" && !localStorage.getItem("coactl.root")) {
       return { screen: "project-gate" };
     }
@@ -42,7 +54,10 @@ export function App() {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [skillsVersion, setSkillsVersion] = useState(0);
+  const [rules, setRules] = useState<Rule[]>([]);
+  const [rulesVersion, setRulesVersion] = useState(0);
   const [draft, setDraft] = useState<Skill | null>(null);
+  const [ruleDraft, setRuleDraft] = useState<Rule | null>(null);
   const [savedContents, setSavedContents] = useState<string | null>(null);
   const [showAllInstalled, setShowAllInstalled] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -53,22 +68,24 @@ export function App() {
   const projectRootSet = Boolean(root.trim());
 
   const dirty =
-    view.screen === "skill" &&
-    draft !== null &&
-    savedContents !== null &&
-    draft.contents !== savedContents;
+    (view.screen === "skill" &&
+      draft !== null &&
+      savedContents !== null &&
+      draft.contents !== savedContents) ||
+    (view.screen === "rule" &&
+      ruleDraft !== null &&
+      savedContents !== null &&
+      ruleDraft.contents !== savedContents);
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
   const viewRef = useRef(view);
   viewRef.current = view;
 
-  /** All in-app navigation goes through here so unsaved edits can veto it. */
   const navigate = useCallback((next: View) => {
     if (dirtyRef.current && !window.confirm(UNSAVED_PROMPT)) return;
     setView(next);
   }, []);
 
-  // Keep the URL hash in sync with the current view (deep links, refresh).
   useEffect(() => {
     const hash = viewToHash(view);
     if (window.location.hash !== hash) {
@@ -76,7 +93,6 @@ export function App() {
     }
   }, [view]);
 
-  // Back/forward buttons and hand-edited hashes.
   useEffect(() => {
     function onHashChange() {
       const current = viewRef.current;
@@ -91,7 +107,6 @@ export function App() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
-  // Warn before closing/reloading the tab with unsaved edits.
   useEffect(() => {
     if (!dirty) return;
     function onBeforeUnload(e: BeforeUnloadEvent) {
@@ -160,9 +175,30 @@ export function App() {
   }, [view, effectiveRoot, pushToast, skillsVersion]);
 
   useEffect(() => {
+    if (view.screen !== "rules" && view.screen !== "rule") return;
+    const scope = modeToScope(view.mode);
+    let cancelled = false;
+    setBusy(true);
+    void api
+      .listRules(effectiveRoot, view.tool, scope)
+      .then((res) => {
+        if (!cancelled) setRules(res.rules);
+      })
+      .catch((err) => {
+        if (!cancelled) pushToast("error", (err as Error).message);
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, effectiveRoot, pushToast, rulesVersion]);
+
+  useEffect(() => {
     if (view.screen !== "skill") {
       setDraft(null);
-      setSavedContents(null);
+      if (view.screen !== "rule") setSavedContents(null);
       return;
     }
     const scope = modeToScope(view.mode);
@@ -174,6 +210,33 @@ export function App() {
         if (!cancelled) {
           setDraft(res.skill);
           setSavedContents(res.skill.contents);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) pushToast("error", (err as Error).message);
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, effectiveRoot, pushToast]);
+
+  useEffect(() => {
+    if (view.screen !== "rule") {
+      setRuleDraft(null);
+      return;
+    }
+    const scope = modeToScope(view.mode);
+    let cancelled = false;
+    setBusy(true);
+    void api
+      .getRule(effectiveRoot, view.tool, view.id, scope, view.path)
+      .then((res) => {
+        if (!cancelled) {
+          setRuleDraft(res.rule);
+          setSavedContents(res.rule.contents);
         }
       })
       .catch((err) => {
@@ -202,7 +265,6 @@ export function App() {
 
   function goMode(mode: Mode) {
     if (mode === "project") {
-      // Gate only when no active root; otherwise continue into tools.
       if (!root.trim()) {
         navigate({ screen: "project-gate" });
         return;
@@ -212,6 +274,10 @@ export function App() {
       return;
     }
     navigate({ screen: "tools", mode });
+  }
+
+  function openTool(tool: SkillTool, mode: Mode) {
+    navigate({ screen: "resources", mode, tool });
   }
 
   async function handlePickFolder() {
@@ -252,6 +318,31 @@ export function App() {
     }
   }
 
+  async function handleCreateRule(id: string) {
+    if (view.screen !== "rules") return;
+    setBusy(true);
+    try {
+      const { rule } = await api.scaffoldRule(effectiveRoot, {
+        id,
+        tool: view.tool,
+        scope: modeToScope(view.mode),
+        save: true,
+      });
+      pushToast("success", `Created ${rule.id}`);
+      navigate({
+        screen: "rule",
+        mode: view.mode,
+        tool: view.tool,
+        id: rule.id,
+        path: rule.filePath,
+      });
+    } catch (err) {
+      pushToast("error", (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleSave() {
     if (!draft || view.screen !== "skill") return;
     setBusy(true);
@@ -277,6 +368,31 @@ export function App() {
     }
   }
 
+  async function handleSaveRule() {
+    if (!ruleDraft || view.screen !== "rule") return;
+    setBusy(true);
+    try {
+      const { rule } = await api.saveRule(
+        effectiveRoot,
+        {
+          tool: ruleDraft.tool,
+          scope: ruleDraft.scope,
+          id: ruleDraft.id,
+          contents: ruleDraft.contents,
+          filePath: ruleDraft.filePath,
+        },
+        false,
+      );
+      setRuleDraft(rule);
+      setSavedContents(rule.contents);
+      pushToast("success", "Saved");
+    } catch (err) {
+      pushToast("error", (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleDelete() {
     if (!draft || view.screen !== "skill") return;
     if (!confirm(`Delete ${draft.tool}/${draft.id}?`)) return;
@@ -292,6 +408,27 @@ export function App() {
     }
   }
 
+  async function handleDeleteRule() {
+    if (!ruleDraft || view.screen !== "rule") return;
+    if (!confirm(`Delete ${ruleDraft.tool}/${ruleDraft.id}?`)) return;
+    setBusy(true);
+    try {
+      await api.deleteRule(
+        effectiveRoot,
+        ruleDraft.tool,
+        ruleDraft.id,
+        ruleDraft.scope,
+        ruleDraft.filePath,
+      );
+      pushToast("success", `Deleted ${ruleDraft.id}`);
+      setView({ screen: "rules", mode: view.mode, tool: view.tool });
+    } catch (err) {
+      pushToast("error", (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleBulkDelete(rows: Skill[]) {
     const deletable = rows.filter((r) => !r.readOnly);
     const skippedReadOnly = rows.length - deletable.length;
@@ -300,7 +437,11 @@ export function App() {
       return;
     }
     const names = deletable.map((r) => r.id).join(", ");
-    if (!confirm(`Delete ${deletable.length} skill${deletable.length === 1 ? "" : "s"} (${names})? This removes their folders.`)) {
+    if (
+      !confirm(
+        `Delete ${deletable.length} skill${deletable.length === 1 ? "" : "s"} (${names})? This removes their folders.`,
+      )
+    ) {
       return;
     }
     setBusy(true);
@@ -322,6 +463,37 @@ export function App() {
     } else {
       const skipNote = skippedReadOnly ? ` (skipped ${skippedReadOnly} read-only)` : "";
       pushToast("success", `Deleted ${ok} skill${ok === 1 ? "" : "s"}${skipNote}`);
+    }
+  }
+
+  async function handleBulkDeleteRules(rows: Rule[]) {
+    if (!rows.length) return;
+    const names = rows.map((r) => r.id).join(", ");
+    if (
+      !confirm(
+        `Delete ${rows.length} rule${rows.length === 1 ? "" : "s"} (${names})? This removes the files.`,
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    let ok = 0;
+    const errors: string[] = [];
+    for (const r of rows) {
+      try {
+        await api.deleteRule(effectiveRoot, r.tool, r.id, r.scope, r.filePath);
+        ok += 1;
+      } catch (err) {
+        errors.push(`${r.id}: ${(err as Error).message}`);
+      }
+    }
+    setBusy(false);
+    setRulesVersion((v) => v + 1);
+    if (currentMode) void refreshWorkspace(currentMode);
+    if (errors.length) {
+      pushToast("error", `Deleted ${ok}, failed ${errors.length}: ${errors.join("; ")}`);
+    } else {
+      pushToast("success", `Deleted ${ok} rule${ok === 1 ? "" : "s"}`);
     }
   }
 
@@ -372,6 +544,54 @@ export function App() {
     return results;
   }
 
+  async function handleBulkPreviewRules(
+    sources: Rule[],
+    targets: Array<{ tool: RuleTool; scope: ScopeMode }>,
+    overwrite: boolean,
+  ): Promise<RuleImportPlan["plan"]> {
+    const plan: RuleImportPlan["plan"] = [];
+    for (const s of sources) {
+      const res = await api.previewRuleImport(effectiveRoot, {
+        source: { tool: s.tool, scope: s.scope, id: s.id },
+        targets,
+        overwrite,
+      });
+      plan.push(...res.plan);
+    }
+    return plan;
+  }
+
+  async function handleBulkImportRules(
+    sources: Rule[],
+    targets: Array<{ tool: RuleTool; scope: ScopeMode }>,
+    overwrite: boolean,
+  ): Promise<RuleImportResult["results"]> {
+    setBusy(true);
+    const results: RuleImportResult["results"] = [];
+    try {
+      for (const s of sources) {
+        const res = await api.importRule(effectiveRoot, {
+          source: { tool: s.tool, scope: s.scope, id: s.id },
+          targets,
+          overwrite,
+        });
+        results.push(...res.results);
+      }
+    } finally {
+      setBusy(false);
+    }
+    const written = results.filter((r) => r.status === "written").length;
+    const skipped = results.filter((r) => r.status === "skipped").length;
+    const failed = results.filter((r) => r.status === "error").length;
+    pushToast(
+      failed ? "error" : "success",
+      `Import finished: ${written} written, ${skipped} skipped${failed ? `, ${failed} failed` : ""}`,
+    );
+    if (currentMode) void refreshWorkspace(currentMode);
+    setRulesVersion((v) => v + 1);
+    return results;
+  }
+
   const crumbs: Array<{ label: string; onClick?: () => void }> = [];
   if (view.screen !== "mode") {
     crumbs.push({ label: "Home", onClick: () => navigate({ screen: "mode" }) });
@@ -379,7 +599,14 @@ export function App() {
   if (view.screen === "project-gate") {
     crumbs.push({ label: "Project" });
   }
-  if (view.screen === "tools" || view.screen === "resources" || view.screen === "skills" || view.screen === "skill") {
+  if (
+    view.screen === "tools" ||
+    view.screen === "resources" ||
+    view.screen === "skills" ||
+    view.screen === "skill" ||
+    view.screen === "rules" ||
+    view.screen === "rule"
+  ) {
     const modeLabel =
       view.mode === "project" && root.trim()
         ? `Project · ${basename(root.trim())}`
@@ -391,11 +618,16 @@ export function App() {
       onClick: () => navigate({ screen: "tools", mode: view.mode }),
     });
   }
-  if (view.screen === "resources" || view.screen === "skills" || view.screen === "skill") {
+  if (
+    view.screen === "resources" ||
+    view.screen === "skills" ||
+    view.screen === "skill" ||
+    view.screen === "rules" ||
+    view.screen === "rule"
+  ) {
     crumbs.push({
       label: toolLabel(view.tool),
-      // Soft-skip Resources: tool crumb goes to skills; resources URL still works for Phase B.
-      onClick: () => navigate({ screen: "skills", mode: view.mode, tool: view.tool }),
+      onClick: () => navigate({ screen: "resources", mode: view.mode, tool: view.tool }),
     });
   }
   if (view.screen === "resources") {
@@ -410,10 +642,23 @@ export function App() {
   if (view.screen === "skill") {
     crumbs.push({ label: view.id });
   }
+  if (view.screen === "rules" || view.screen === "rule") {
+    crumbs.push({
+      label: "Rules",
+      onClick: () => navigate({ screen: "rules", mode: view.mode, tool: view.tool }),
+    });
+  }
+  if (view.screen === "rule") {
+    crumbs.push({ label: view.id });
+  }
 
   const showRootControl =
-    view.screen === "project-gate" || currentMode === "project" || view.screen === "skill";
-  const rootControlForImportOnly = currentMode === "global" && view.screen === "skill";
+    view.screen === "project-gate" ||
+    currentMode === "project" ||
+    view.screen === "skill" ||
+    view.screen === "rule";
+  const rootControlForImportOnly =
+    currentMode === "global" && (view.screen === "skill" || view.screen === "rule");
 
   return (
     <div className="app">
@@ -541,7 +786,7 @@ export function App() {
             workspace={workspace}
             showAllInstalled={showAllInstalled}
             onShowAllInstalled={setShowAllInstalled}
-            onSelectTool={(tool) => navigate({ screen: "skills", mode: view.mode, tool })}
+            onSelectTool={(tool) => openTool(tool, view.mode)}
           />
         )}
 
@@ -551,6 +796,7 @@ export function App() {
             tool={view.tool}
             workspace={workspace}
             onSelectSkills={() => navigate({ screen: "skills", mode: view.mode, tool: view.tool })}
+            onSelectRules={() => navigate({ screen: "rules", mode: view.mode, tool: view.tool })}
           />
         )}
 
@@ -604,6 +850,67 @@ export function App() {
                   tool: draft.tool,
                   scope: draft.scope,
                   id: draft.id,
+                },
+                targets,
+                overwrite,
+              });
+              pushToast("success", "Import finished");
+              if (currentMode) await refreshWorkspace(currentMode);
+              return result;
+            }}
+          />
+        )}
+
+        {view.screen === "rules" && workspace && (
+          <RulesListView
+            key={`rules:${view.mode}:${view.tool}`}
+            mode={view.mode}
+            tool={view.tool}
+            rules={rules}
+            workspace={workspace}
+            projectRootSet={projectRootSet}
+            busy={busy}
+            onBulkDelete={handleBulkDeleteRules}
+            onBulkPreview={handleBulkPreviewRules}
+            onBulkImport={handleBulkImportRules}
+            onOpen={(rule) =>
+              navigate({
+                screen: "rule",
+                mode: view.mode,
+                tool: view.tool,
+                id: rule.id,
+                path: rule.filePath,
+              })
+            }
+            onCreate={handleCreateRule}
+          />
+        )}
+
+        {view.screen === "rule" && ruleDraft && workspace && (
+          <RuleDetailView
+            mode={view.mode}
+            tool={view.tool}
+            rule={ruleDraft}
+            workspace={workspace}
+            projectRootSet={projectRootSet}
+            busy={busy}
+            dirty={dirty}
+            onChangeContents={(contents) => setRuleDraft({ ...ruleDraft, contents })}
+            onSave={handleSaveRule}
+            onDelete={handleDeleteRule}
+            onPreviewImport={(targets, overwrite) =>
+              api.previewRuleImport(effectiveRoot, {
+                source: { tool: ruleDraft.tool, scope: ruleDraft.scope, id: ruleDraft.id },
+                targets,
+                overwrite,
+              })
+            }
+            onImport={async (targets, overwrite) => {
+              const result = await api.importRule(effectiveRoot, {
+                source: {
+                  tool: ruleDraft.tool,
+                  scope: ruleDraft.scope,
+                  id: ruleDraft.id,
                 },
                 targets,
                 overwrite,
