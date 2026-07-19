@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ImportPlan, ImportResult, ScopeMode, Skill, Workspace } from "../api";
+import { ImportPanel } from "../components/ImportPanel";
+import { PathCandidates } from "../components/PathCandidates";
 import { buildDestinations } from "../import-destinations";
 import { toolLabel, type Mode, type SkillTool } from "../nav";
 
@@ -45,17 +47,12 @@ export function SkillsListView({
   const [newId, setNewId] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
-  const [destSelected, setDestSelected] = useState<Set<string>>(new Set());
-  const [overwrite, setOverwrite] = useState(false);
-  const [plan, setPlan] = useState<ImportPlan["plan"] | null>(null);
-  const [results, setResults] = useState<ImportResult["results"] | null>(null);
   const idInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (creating) idInputRef.current?.focus();
   }, [creating]);
 
-  // Drop selections that no longer exist (e.g. after a bulk delete reload).
   useEffect(() => {
     setSelected((prev) => {
       const alive = new Set(skills.map((s) => s.filePath));
@@ -68,7 +65,6 @@ export function SkillsListView({
     mode === "global"
       ? workspace.skillPathsByTool[tool]?.global
       : workspace.skillPathsByTool[tool]?.project;
-  const folder = folderInfo?.path;
   const createFolder = folderInfo?.preferred;
 
   const duplicateIds = new Set(
@@ -86,12 +82,9 @@ export function SkillsListView({
     : skills;
 
   const selectedRows = skills.filter((s) => selected.has(s.filePath));
-  // Import sources are tool+scope+id; duplicates of the same id resolve to one source.
   const selectedSources = [...new Map(selectedRows.map((s) => [s.id, s])).values()];
   const destinations = buildDestinations(tool, mode, workspace, projectRootSet);
-  const selectedTargets = destinations
-    .filter((d) => destSelected.has(d.key))
-    .map((d) => ({ tool: d.tool, scope: d.scope }));
+  const incomingById = Object.fromEntries(selectedSources.map((s) => [s.id, s.contents]));
 
   const trimmedId = newId.trim();
   const idValid = !trimmedId || KEBAB.test(trimmedId);
@@ -118,39 +111,11 @@ export function SkillsListView({
       else next.add(filePath);
       return next;
     });
-    setPlan(null);
-    setResults(null);
   }
 
   function clearSelection() {
     setSelected(new Set());
     setImporting(false);
-    setPlan(null);
-    setResults(null);
-  }
-
-  function toggleDest(key: string) {
-    setDestSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-    setPlan(null);
-    setResults(null);
-  }
-
-  async function runPreview() {
-    if (!selectedSources.length || !selectedTargets.length) return;
-    setResults(null);
-    setPlan(await onBulkPreview(selectedSources, selectedTargets, overwrite));
-  }
-
-  async function runImport() {
-    if (!selectedSources.length || !selectedTargets.length) return;
-    const res = await onBulkImport(selectedSources, selectedTargets, overwrite);
-    setPlan(null);
-    setResults(res);
   }
 
   return (
@@ -182,19 +147,7 @@ export function SkillsListView({
         </div>
       </div>
 
-      {folder && (
-        <p className="path-banner">
-          Folder{folderInfo?.exists ? "" : " (will be created)"}: <code>{folder}</code>
-        </p>
-      )}
-      {folderInfo && folderInfo.candidates.length > 1 && (
-        <p className="muted" style={{ fontSize: "0.78rem", margin: "-0.5rem 0 0.9rem" }}>
-          Scanned:{" "}
-          {(folderInfo.candidateDetails ?? folderInfo.candidates.map((path) => ({ path, writable: true })))
-            .map((c) => `${c.path}${c.writable ? "" : " (read-only)"}`)
-            .join(" · ")}
-        </p>
-      )}
+      {folderInfo && <PathCandidates info={folderInfo} />}
 
       {creating && (
         <div className="create-panel">
@@ -276,11 +229,7 @@ export function SkillsListView({
           <button
             type="button"
             disabled={destinations.length === 0}
-            onClick={() => {
-              setImporting((v) => !v);
-              setPlan(null);
-              setResults(null);
-            }}
+            onClick={() => setImporting((v) => !v)}
           >
             {importing ? "Hide import" : "Import to…"}
           </button>
@@ -289,156 +238,17 @@ export function SkillsListView({
 
       {selected.size > 0 && importing && (
         <div className="bulk-import">
-          <p className="panel-sub" style={{ marginBottom: "0.6rem" }}>
-            Copy {selectedSources.length} skill{selectedSources.length === 1 ? "" : "s"} to other
-            tools and/or the other scope. Preview shows exactly what would happen before anything is
-            written.
-          </p>
-          {!projectRootSet && (
-            <div className="callout" style={{ marginBottom: "0.75rem" }}>
-              Project destinations are hidden — set a project root in the top bar to import into a
-              project.
-            </div>
-          )}
-          <div className="dest-grid">
-            {destinations.map((d) => (
-              <label key={d.key} className="dest-row">
-                <input
-                  type="checkbox"
-                  checked={destSelected.has(d.key)}
-                  onChange={() => toggleDest(d.key)}
-                />
-                <span style={{ fontWeight: 550 }}>{toolLabel(d.tool)}</span>
-                <span className={`badge scope-${d.scope}`}>{d.scope}</span>
-                {d.installed && <span className="badge clean">installed</span>}
-                {d.path && (
-                  <code className="path-line" title={d.path}>
-                    {d.path}/&lt;id&gt;/SKILL.md
-                  </code>
-                )}
-              </label>
-            ))}
-          </div>
-          <div className="import-bar">
-            <label className="check-line">
-              <input
-                type="checkbox"
-                checked={overwrite}
-                onChange={(e) => {
-                  setOverwrite(e.target.checked);
-                  setPlan(null);
-                }}
-              />
-              Overwrite if target already exists
-            </label>
-            <div className="actions">
-              <button
-                type="button"
-                disabled={busy || selectedTargets.length === 0}
-                onClick={() => void runPreview()}
-              >
-                Preview
-              </button>
-              <button
-                className="primary"
-                type="button"
-                disabled={busy || selectedTargets.length === 0 || !plan}
-                title={plan ? "" : "Preview first"}
-                onClick={() => void runImport()}
-              >
-                Apply import
-              </button>
-            </div>
-          </div>
-
-          {plan && (
-            <div className="table-wrap" style={{ marginTop: "0.9rem" }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Skill</th>
-                    <th>Target</th>
-                    <th>Action</th>
-                    <th>Path</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {plan.map((p) => (
-                    <tr key={`${p.id}:${p.tool}:${p.scope}`}>
-                      <td>
-                        <strong>{p.id}</strong>
-                      </td>
-                      <td>
-                        {toolLabel(p.tool)}
-                        <span className={`badge scope-${p.scope}`} style={{ marginLeft: 6 }}>
-                          {p.scope}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`badge ${actionTone(p.action)}`}>{p.action}</span>
-                        {p.reason && (
-                          <span className="muted" style={{ display: "block", fontSize: "0.78rem" }}>
-                            {p.reason}
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        <code className="path-line" title={p.filePath}>
-                          {p.filePath}
-                          {p.exists ? " (exists)" : ""}
-                        </code>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {results && (
-            <div className="table-wrap" style={{ marginTop: "0.9rem" }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Skill</th>
-                    <th>Target</th>
-                    <th>Result</th>
-                    <th>Path</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {results.map((r) => (
-                    <tr key={`${r.id}:${r.tool}:${r.scope}`}>
-                      <td>
-                        <strong>{r.id}</strong>
-                      </td>
-                      <td>
-                        {toolLabel(r.tool)}
-                        <span className={`badge scope-${r.scope}`} style={{ marginLeft: 6 }}>
-                          {r.scope}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`badge ${statusTone(r.status)}`}>{r.status}</span>
-                        {r.error && (
-                          <span className="muted" style={{ display: "block", fontSize: "0.78rem" }}>
-                            {r.error}
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        {r.filePath && (
-                          <code className="path-line" title={r.filePath}>
-                            {r.filePath}
-                          </code>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <ImportPanel
+            destinations={destinations}
+            projectRootSet={projectRootSet}
+            busy={busy}
+            pathIdHint="<id>"
+            showSkillColumn
+            blurb={`Copy ${selectedSources.length} skill${selectedSources.length === 1 ? "" : "s"} to other tools and/or the other scope. Preview shows exactly what would happen before anything is written.`}
+            incomingById={incomingById}
+            onPreview={(targets, overwrite) => onBulkPreview(selectedSources, targets, overwrite)}
+            onApply={(targets, overwrite) => onBulkImport(selectedSources, targets, overwrite)}
+          />
         </div>
       )}
 
@@ -497,31 +307,6 @@ export function SkillsListView({
   );
 }
 
-function actionTone(action: "write" | "overwrite" | "skip" | "error"): string {
-  switch (action) {
-    case "write":
-      return "clean";
-    case "overwrite":
-      return "warn";
-    case "error":
-      return "danger";
-    default:
-      return "";
-  }
-}
-
-function statusTone(status: "written" | "skipped" | "error"): string {
-  switch (status) {
-    case "written":
-      return "clean";
-    case "error":
-      return "danger";
-    default:
-      return "";
-  }
-}
-
-/** Keep the informative tail of a path: "…agents/skills/foo/SKILL.md". */
 function truncateStart(text: string, max: number): string {
   return text.length > max ? `…${text.slice(-(max - 1))}` : text;
 }

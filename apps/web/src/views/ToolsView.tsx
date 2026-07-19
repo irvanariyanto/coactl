@@ -45,8 +45,7 @@ export function ToolsView({
         )}
       </div>
       <p className="panel-sub">
-        Paths are resolved from each tool&apos;s real skill directories — the existing location is
-        preferred.
+        Open a tool to manage its skills. Paths resolve from each tool&apos;s native skill folders.
       </p>
       <div className="tool-grid">
         {tools.map((tool) => {
@@ -76,7 +75,7 @@ export function ToolsView({
                   </span>
                 </span>
               </span>
-              {info && <PathBlock info={info} />}
+              {info && <ToolPathLine info={info} />}
               <span className="badge-row">
                 {tool.installed && <span className="badge clean">installed</span>}
                 {tool.presentInProject && <span className="badge info">in project</span>}
@@ -101,15 +100,16 @@ export function ToolsView({
   );
 }
 
-function PathBlock({ info }: { info: SkillPathInfo }) {
+function ToolPathLine({ info }: { info: SkillPathInfo }) {
+  const extraCount = Math.max(0, info.candidates.length - 1);
   return (
     <>
       <code className="path-line" title={info.path}>
         {info.path}
       </code>
-      {info.candidates.length > 1 && (
+      {extraCount > 0 && (
         <span className="muted" style={{ fontSize: "0.72rem" }}>
-          also checks: {info.candidates.filter((c) => c !== info.path).join(" · ")}
+          +{extraCount} alternate path{extraCount === 1 ? "" : "s"}
         </span>
       )}
     </>

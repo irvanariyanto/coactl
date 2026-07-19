@@ -1,5 +1,6 @@
 import { toolLabel, type Mode, type SkillTool } from "../nav";
 import type { Workspace } from "../api";
+import { PathCandidates } from "../components/PathCandidates";
 
 interface Props {
   mode: Mode;
@@ -15,6 +16,7 @@ const KINDS = [
   { id: "workflows", label: "Workflows", enabled: false, blurb: "Coming soon" },
 ] as const;
 
+/** Kept for Phase B deep links (`#/{mode}/{tool}`); primary flow soft-skips to Skills. */
 export function ResourcesView({ mode, tool, workspace, onSelectSkills }: Props) {
   const paths = workspace.skillPathsByTool[tool];
   const active = mode === "global" ? paths?.global : paths?.project;
@@ -25,35 +27,11 @@ export function ResourcesView({ mode, tool, workspace, onSelectSkills }: Props) 
         {toolLabel(tool)} resources
         <span className={`badge scope-${mode}`}>{mode}</span>
       </h2>
-      <p className="panel-sub">Choose a resource kind. Skills are available now.</p>
-      {active && (
-        <p className="path-banner">
-          Active skills path{active.exists ? "" : " (not created yet)"}:{" "}
-          <code>{active.path}</code>
-        </p>
-      )}
-      {paths && (
-        <div className="path-pair muted">
-          <div>
-            <span className={`badge scope-project ${paths.project.exists ? "" : ""}`}>project</span>{" "}
-            <code className="path-line" style={{ display: "inline" }}>
-              {paths.project.path}
-            </code>
-          </div>
-          <div>
-            <span className="badge scope-global">global</span>{" "}
-            <code className="path-line" style={{ display: "inline" }}>
-              {paths.global.path}
-            </code>
-          </div>
-          {(paths.project.candidates.length > 1 || paths.global.candidates.length > 1) && (
-            <div style={{ marginTop: "0.25rem", fontSize: "0.78rem" }}>
-              <div>project candidates: {paths.project.candidates.join(" · ")}</div>
-              <div>global candidates: {paths.global.candidates.join(" · ")}</div>
-            </div>
-          )}
-        </div>
-      )}
+      <p className="panel-sub">
+        Skills are available now. Other resource kinds will land here in a later phase — for daily
+        use, open Skills directly from the tools list.
+      </p>
+      {active && <PathCandidates info={active} label="Active skills path" />}
       <div className="tool-grid" style={{ marginTop: "1rem" }}>
         {KINDS.map((kind) => (
           <button
@@ -71,11 +49,6 @@ export function ResourcesView({ mode, tool, workspace, onSelectSkills }: Props) 
             <span className="muted" style={{ fontSize: "0.85rem" }}>
               {kind.blurb}
             </span>
-            {kind.enabled && active && (
-              <code className="path-line" title={active.path}>
-                {active.path}
-              </code>
-            )}
             {!kind.enabled && (
               <span className="badge-row">
                 <span className="badge">soon</span>

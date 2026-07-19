@@ -202,8 +202,8 @@ export function App() {
 
   function goMode(mode: Mode) {
     if (mode === "project") {
-      // No root yet, or several recent projects to choose from → show the picker.
-      if (!root.trim() || recent.length > 1) {
+      // Gate only when no active root; otherwise continue into tools.
+      if (!root.trim()) {
         navigate({ screen: "project-gate" });
         return;
       }
@@ -238,7 +238,7 @@ export function App() {
         save: true,
       });
       pushToast("success", `Created ${skill.id}`);
-      setView({
+      navigate({
         screen: "skill",
         mode: view.mode,
         tool: view.tool,
@@ -394,8 +394,12 @@ export function App() {
   if (view.screen === "resources" || view.screen === "skills" || view.screen === "skill") {
     crumbs.push({
       label: toolLabel(view.tool),
-      onClick: () => navigate({ screen: "resources", mode: view.mode, tool: view.tool }),
+      // Soft-skip Resources: tool crumb goes to skills; resources URL still works for Phase B.
+      onClick: () => navigate({ screen: "skills", mode: view.mode, tool: view.tool }),
     });
+  }
+  if (view.screen === "resources") {
+    crumbs.push({ label: "Resources" });
   }
   if (view.screen === "skills" || view.screen === "skill") {
     crumbs.push({
@@ -409,6 +413,7 @@ export function App() {
 
   const showRootControl =
     view.screen === "project-gate" || currentMode === "project" || view.screen === "skill";
+  const rootControlForImportOnly = currentMode === "global" && view.screen === "skill";
 
   return (
     <div className="app">
@@ -433,16 +438,23 @@ export function App() {
 
         {showRootControl && (
           <div className="root-control">
-            {recent.length > 0 && (
+            {rootControlForImportOnly && (
+              <span className="root-control-label" title="Needed for project import destinations">
+                Project root
+              </span>
+            )}
+            {(recent.length > 0 || root.trim()) && (
               <select
                 className="recent-select"
                 aria-label="Switch project"
                 value={root.trim()}
+                title={root.trim() || undefined}
                 onChange={(e) => {
                   if (!e.target.value) return;
                   selectProject(e.target.value);
                 }}
               >
+                {!root.trim() && <option value="">Select…</option>}
                 {!recent.includes(root.trim()) && root.trim() && (
                   <option value={root.trim()}>{projectBasename(root.trim())}</option>
                 )}
@@ -453,20 +465,6 @@ export function App() {
                 ))}
               </select>
             )}
-            <input
-              id="root"
-              aria-label="Project root"
-              value={root}
-              onChange={(e) => setRoot(e.target.value)}
-              onBlur={() => {
-                if (root.trim()) rememberRoot(root);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && root.trim()) rememberRoot(root);
-              }}
-              placeholder="/path/to/project"
-              title={root.trim() || undefined}
-            />
             <button type="button" onClick={() => void handlePickFolder()}>
               Browse…
             </button>
@@ -543,7 +541,7 @@ export function App() {
             workspace={workspace}
             showAllInstalled={showAllInstalled}
             onShowAllInstalled={setShowAllInstalled}
-            onSelectTool={(tool) => navigate({ screen: "resources", mode: view.mode, tool })}
+            onSelectTool={(tool) => navigate({ screen: "skills", mode: view.mode, tool })}
           />
         )}
 

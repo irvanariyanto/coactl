@@ -80,17 +80,19 @@ Developers use multiple AI coding assistants (Claude Code, Cursor, Codex, Gemini
 Home
   ├─ Global ──────────────────────────────┐
   │                                       │
-  └─ Project → (require project root) ────┤
+  └─ Project → (root required; continue   │
+       current or pick recent/Browse) ────┤
                                           ▼
                                        Tools
                                           ▼
-                               Resources (Skills active;
-                               Rules/Commands/Workflows = soon)
-                                          ▼
                                     Skills list
+                              (bulk delete / import)
                                           ▼
                                    Skill detail
                               (edit / delete / import)
+
+Optional deep link: Tools → Resources hub
+(Rules/Commands/Workflows = Phase B; primary UI soft-skips to Skills)
 ```
 
 ### 6.2 Modes
@@ -105,11 +107,11 @@ Home
 | Screen | Requirements |
 |--------|----------------|
 | Mode home | Two clear choices: Global / Project |
-| Project gate | Block until project root is set; persist active root + recent projects (up to 8) in `localStorage`; switch via list, top-bar select, or Browse |
-| Tools | Cards with skill count, resolved path, installed / in-project / path-ok badges |
-| Resources | Skills enabled; other kinds disabled with “Coming soon”; show project + global path candidates |
-| Skills list | Card grid for selected tool + mode with filter; folder + per-skill path; inline create panel; multi-select with bulk delete and bulk import (preview → apply) |
-| Skill detail | Edit full `SKILL.md`; save/delete; import panel with destinations (tool × scope) and paths |
+| Project gate | Prefer **Continue** on the active root; recent projects secondary; typed path + Browse for new folders; persist root + up to 8 recents in `localStorage` |
+| Tools | Cards with skill count, primary path (+N alternates hint), installed / in-project / path-ok badges; click opens **Skills** (soft-skip Resources) |
+| Resources | Optional hub (`#/{mode}/{tool}`) for Phase B kinds; Skills enabled; others “Coming soon”; collapsible scanned paths |
+| Skills list | Card grid with filter; one path banner + collapsible candidates; inline create; multi-select bulk delete / import (shared preview panel with overwrite diff) |
+| Skill detail | Edit full `SKILL.md`; save/delete; same import panel as bulk (preview → apply, View diff on overwrite) |
 
 ### 6.4 Navigation
 
@@ -338,8 +340,8 @@ Exit criteria met: skills feel trustworthy for daily Global ↔ Project / cross-
 
 ### Phase C — Nice-to-have
 
-1. Deep links / router (`mode/tool/skill` URLs)  
-2. Richer diff UI for import overwrite  
+1. Deep links / router — **shipped** (URL hash; soft-skip Resources in primary flow)  
+2. Richer diff UI for import overwrite — **partial** (unified View diff on single + bulk overwrite; side-by-side still optional)  
 3. Optional revival of legacy remote sources **only** if they still write native dirs (no `.coactl` registry)
 
 Legacy CLI capabilities (lockfile, drift sync from `.coactl`) remain archived unless explicitly revived under native-first constraints.
