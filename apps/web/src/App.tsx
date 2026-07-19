@@ -25,6 +25,7 @@ import {
 } from "./api";
 import { ResourceKindSwitcher } from "./components/ResourceKindSwitcher";
 import { AppSidebar } from "./components/AppSidebar";
+import { AppVersion } from "./components/AppVersion";
 import { ThemeToggle, type Theme } from "./components/ThemeToggle";
 import {
   modeToScope,
@@ -1532,6 +1533,7 @@ export function App() {
               coa<em>ctl</em>
             </span>
           </div>
+          <AppVersion />
           <div className="topbar-spacer" />
           <ThemeToggle
             theme={theme}
@@ -1577,6 +1579,7 @@ export function App() {
             coa<em>ctl</em>
           </span>
         </button>
+        <AppVersion />
 
         {currentMode && (
           <span className={`mode-pill ${currentMode}`}>
