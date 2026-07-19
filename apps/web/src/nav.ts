@@ -14,6 +14,9 @@ export type CommandTool = "claude-code" | "cursor" | "opencode" | "antigravity";
 
 export type WorkflowTool = "claude-code";
 
+/** Top-level resource kinds shown in the Resources hub / kind switcher. */
+export type ResourceKind = "skills" | "rules" | "commands" | "workflows";
+
 export type View =
   | { screen: "mode" }
   | { screen: "project-gate" }
@@ -57,6 +60,61 @@ export function supportsCommands(tool: SkillTool): tool is CommandTool {
 /** Tools with Claude Code dynamic workflow scripts (.js under .claude/workflows/). */
 export function supportsWorkflows(tool: SkillTool): tool is WorkflowTool {
   return tool === "claude-code";
+}
+
+export function availableResourceKinds(tool: SkillTool): ResourceKind[] {
+  const kinds: ResourceKind[] = ["skills", "rules"];
+  if (supportsCommands(tool)) kinds.push("commands");
+  if (supportsWorkflows(tool)) kinds.push("workflows");
+  return kinds;
+}
+
+export function resourceKindLabel(kind: ResourceKind): string {
+  switch (kind) {
+    case "skills":
+      return "Skills";
+    case "rules":
+      return "Rules";
+    case "commands":
+      return "Commands";
+    case "workflows":
+      return "Workflows";
+  }
+}
+
+/** List-screen View for a resource kind (never a detail screen). */
+export function resourceKindListView(mode: Mode, tool: SkillTool, kind: ResourceKind): View {
+  switch (kind) {
+    case "skills":
+      return { screen: "skills", mode, tool };
+    case "rules":
+      return { screen: "rules", mode, tool };
+    case "commands":
+      return { screen: "commands", mode, tool: tool as CommandTool };
+    case "workflows":
+      return { screen: "workflows", mode, tool: tool as WorkflowTool };
+  }
+}
+
+export function viewResourceKind(view: View): ResourceKind | null {
+  switch (view.screen) {
+    case "skills":
+    case "skill":
+      return "skills";
+    case "rules":
+    case "rule":
+      return "rules";
+    case "commands":
+    case "command":
+      return "commands";
+    case "workflows":
+    case "workflow":
+      return "workflows";
+    case "resources":
+      return null;
+    default:
+      return null;
+  }
 }
 
 /** Serialize a view into a shareable URL hash (deep links survive refresh). */

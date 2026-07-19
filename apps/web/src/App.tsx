@@ -20,14 +20,18 @@ import {
   type WorkflowTool,
   type Workspace,
 } from "./api";
+import { ResourceKindSwitcher } from "./components/ResourceKindSwitcher";
 import {
   modeToScope,
   parseHash,
+  resourceKindListView,
   supportsCommands,
   supportsWorkflows,
   toolLabel,
+  viewResourceKind,
   viewToHash,
   type Mode,
+  type ResourceKind,
   type View,
 } from "./nav";
 import {
@@ -36,6 +40,7 @@ import {
   projectBasename,
   rememberProject,
 } from "./recent-projects";
+import { preferredResourceKind, rememberResourceNav } from "./recent-resource-nav";
 import { CommandDetailView } from "./views/CommandDetailView";
 import { CommandsListView } from "./views/CommandsListView";
 import { ModeHomeView } from "./views/ModeHomeView";
@@ -126,6 +131,12 @@ export function App() {
     if (window.location.hash !== hash) {
       history.replaceState(null, "", hash);
     }
+  }, [view]);
+
+  useEffect(() => {
+    const kind = viewResourceKind(view);
+    if (!kind || !("mode" in view) || !("tool" in view)) return;
+    rememberResourceNav(view.mode, view.tool, kind);
   }, [view]);
 
   useEffect(() => {
@@ -410,8 +421,16 @@ export function App() {
   }
 
   function openTool(tool: SkillTool, mode: Mode) {
-    navigate({ screen: "resources", mode, tool });
+    const kind = preferredResourceKind(mode, tool);
+    navigate(resourceKindListView(mode, tool, kind));
   }
+
+  function openResourceKind(mode: Mode, tool: SkillTool, kind: ResourceKind) {
+    rememberResourceNav(mode, tool, kind);
+    navigate(resourceKindListView(mode, tool, kind));
+  }
+
+  const activeResourceKind = viewResourceKind(view);
 
   async function handlePickFolder() {
     try {
@@ -1225,6 +1244,15 @@ export function App() {
           </nav>
         )}
 
+        {activeResourceKind && "tool" in view && "mode" in view && (
+          <ResourceKindSwitcher
+            mode={view.mode}
+            tool={view.tool}
+            active={activeResourceKind}
+            onSelect={(kind) => openResourceKind(view.mode, view.tool, kind)}
+          />
+        )}
+
         {view.screen === "mode" && <ModeHomeView onSelect={goMode} />}
 
         {view.screen === "project-gate" && (
@@ -1261,16 +1289,16 @@ export function App() {
             mode={view.mode}
             tool={view.tool}
             workspace={workspace}
-            onSelectSkills={() => navigate({ screen: "skills", mode: view.mode, tool: view.tool })}
-            onSelectRules={() => navigate({ screen: "rules", mode: view.mode, tool: view.tool })}
+            onSelectSkills={() => openResourceKind(view.mode, view.tool, "skills")}
+            onSelectRules={() => openResourceKind(view.mode, view.tool, "rules")}
             onSelectCommands={() => {
               if (supportsCommands(view.tool)) {
-                navigate({ screen: "commands", mode: view.mode, tool: view.tool });
+                openResourceKind(view.mode, view.tool, "commands");
               }
             }}
             onSelectWorkflows={() => {
               if (supportsWorkflows(view.tool)) {
-                navigate({ screen: "workflows", mode: view.mode, tool: view.tool });
+                openResourceKind(view.mode, view.tool, "workflows");
               }
             }}
           />

@@ -337,6 +337,46 @@ textarea:read-only {
   user-select: none;
 }
 
+.kind-switcher {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-self: flex-start;
+  gap: 0.2rem;
+  padding: 0.2rem;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.kind-switcher-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0.38rem 0.75rem;
+  border-radius: calc(var(--radius-md) - 2px);
+  font-size: 0.82rem;
+  font-weight: 550;
+  box-shadow: none;
+}
+
+.kind-switcher-btn:hover:not(.active) {
+  color: var(--text);
+  background: var(--surface-2);
+  border-color: transparent;
+}
+
+.kind-switcher-btn.active {
+  background: var(--surface-3);
+  color: var(--text);
+  border-color: transparent;
+  box-shadow: var(--shadow-1);
+}
+
+.kind-switcher-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
 .crumb-link {
   background: transparent;
   border: none;
