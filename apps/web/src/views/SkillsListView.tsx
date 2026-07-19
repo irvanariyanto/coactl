@@ -1,9 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import type { ImportPlan, ImportResult, ScopeMode, Skill, Workspace } from "../api";
+import type {
+  GitSkillsInstallPlan,
+  GitSkillsInstallResult,
+  GitSkillsPreview,
+  ImportPlan,
+  ImportResult,
+  ScopeMode,
+  Skill,
+  Workspace,
+} from "../api";
+import { GitInstallPanel } from "../components/GitInstallPanel";
 import { ImportPanel } from "../components/ImportPanel";
 import { PathCandidates } from "../components/PathCandidates";
 import { buildDestinations } from "../import-destinations";
-import { toolLabel, type Mode, type SkillTool } from "../nav";
+import { modeToScope, toolLabel, type Mode, type SkillTool } from "../nav";
 
 interface Props {
   mode: Mode;
@@ -25,6 +35,19 @@ interface Props {
     targets: Array<{ tool: SkillTool; scope: ScopeMode }>,
     overwrite: boolean,
   ) => Promise<ImportResult["results"]>;
+  onPreviewGitRepo: (input: {
+    url: string;
+    branch?: string;
+    subpath?: string;
+  }) => Promise<GitSkillsPreview>;
+  onPreviewGitInstall: (
+    skills: Array<{ id: string; contents: string }>,
+    overwrite: boolean,
+  ) => Promise<GitSkillsInstallPlan["plan"]>;
+  onInstallGitSkills: (
+    skills: Array<{ id: string; contents: string }>,
+    overwrite: boolean,
+  ) => Promise<GitSkillsInstallResult["results"]>;
 }
 
 const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -41,12 +64,16 @@ export function SkillsListView({
   onBulkDelete,
   onBulkPreview,
   onBulkImport,
+  onPreviewGitRepo,
+  onPreviewGitInstall,
+  onInstallGitSkills,
 }: Props) {
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const [newId, setNewId] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
+  const [fromGit, setFromGit] = useState(false);
   const idInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -139,8 +166,25 @@ export function SkillsListView({
               onChange={(e) => setQuery(e.target.value)}
             />
           )}
+          <button
+            type="button"
+            className={fromGit ? undefined : "ghost"}
+            onClick={() => {
+              setFromGit((v) => !v);
+              setCreating(false);
+            }}
+          >
+            {fromGit ? "Hide git install" : "Install from Git…"}
+          </button>
           {!creating && (
-            <button className="primary" type="button" onClick={() => setCreating(true)}>
+            <button
+              className="primary"
+              type="button"
+              onClick={() => {
+                setCreating(true);
+                setFromGit(false);
+              }}
+            >
               + New skill
             </button>
           )}
@@ -148,6 +192,32 @@ export function SkillsListView({
       </div>
 
       {folderInfo && <PathCandidates info={folderInfo} />}
+
+      {fromGit && (
+        <div className="create-panel">
+          <div className="create-panel-head">
+            <strong>Install from Git</strong>
+            <span className="muted" style={{ fontSize: "0.82rem" }}>
+              Target: {toolLabel(tool)} · {mode} (
+              <code>
+                {createFolder ?? "…"}/&lt;id&gt;/SKILL.md
+              </code>
+              )
+            </span>
+          </div>
+          <GitInstallPanel
+            tool={tool}
+            scope={modeToScope(mode)}
+            busy={busy}
+            onPreviewRepo={onPreviewGitRepo}
+            onPreviewInstall={onPreviewGitInstall}
+            onInstall={async (skills, overwrite) => {
+              const results = await onInstallGitSkills(skills, overwrite);
+              return results;
+            }}
+          />
+        </div>
+      )}
 
       {creating && (
         <div className="create-panel">
@@ -256,16 +326,18 @@ export function SkillsListView({
         <div className="empty">
           No skills yet for {toolLabel(tool)} in {mode} scope.
           <br />
-          {!creating && (
-            <button
-              className="primary"
-              type="button"
-              style={{ marginTop: "0.9rem" }}
-              onClick={() => setCreating(true)}
-            >
-              Create your first skill
-            </button>
-          )}
+          <div className="actions" style={{ marginTop: "0.9rem", justifyContent: "center" }}>
+            {!creating && (
+              <button className="primary" type="button" onClick={() => setCreating(true)}>
+                Create your first skill
+              </button>
+            )}
+            {!fromGit && (
+              <button type="button" onClick={() => setFromGit(true)}>
+                Install from Git…
+              </button>
+            )}
+          </div>
         </div>
       ) : visible.length === 0 ? (
         <div className="empty">No skills match “{query.trim()}”.</div>

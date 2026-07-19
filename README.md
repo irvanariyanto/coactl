@@ -23,6 +23,9 @@ Home → Global | Project
 **Import** from a detail view can copy to other tools and across scopes (global ↔ project),
 with a dry-run preview (write / skip / overwrite per target) before anything is written.
 
+**Install from Git** on a Skills list shallow-clones a public repo, finds `SKILL.md` folders
+(`skills/`, `.claude/skills/`, …), previews targets, and writes into the current tool’s native dir.
+
 Safety rules:
 
 - Vendor-managed trees (Cursor `skills-cursor`) are **read-only**: listed and importable-from,
@@ -105,6 +108,8 @@ Prefer HTTPS via a reverse proxy. Put the process behind a locked-down OS user.
 | POST | `/api/skills` | Create (always the preferred writable dir) |
 | POST | `/api/skills/scaffold` | Scaffold (+ save) |
 | POST | `/api/skills/import` | Copy to other tools/scopes (`dryRun: true` previews) |
+| POST | `/api/skills/remote/git/preview` | Shallow-clone URL and list `SKILL.md` candidates |
+| POST | `/api/skills/remote/git/install` | Write selected remote skills (`dryRun` previews) |
 | GET | `/api/rules?tool=&scope=` | List rules / instruction files |
 | GET/PUT/DELETE | `/api/rules/:tool/:id?scope=&path=` | Read / update / delete rule file |
 | POST | `/api/rules` | Create rule |

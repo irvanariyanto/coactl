@@ -1263,6 +1263,16 @@ tbody tr.row-link:hover {
   font-size: 0.8rem;
 }
 
+.git-install-panel {
+  padding: 0 0 0.25rem;
+}
+
+.git-install-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
 @media (max-width: 720px) {
   .diff-split-head,
   .diff-split-row {

@@ -44,7 +44,7 @@ Developers use multiple AI coding assistants (Claude Code, Cursor, Codex, Gemini
 
 - Central registry / `.coactl` canonical store
 - Full multi-kind parity (rules, commands, workflows) before skills polish is done
-- Remote skill packs (git/npm/url sources) from the legacy CLI
+- npm/url remote packs from the legacy CLI (git URL install is available)
 - Multi-user SaaS / remote hosting
 - Editing Commands / Workflows / AGENTS.md aggregates until later Phase B work (Rules MVP is in)
 
@@ -397,7 +397,7 @@ Exit criteria met: skills feel trustworthy for daily Global ↔ Project / cross-
 
 1. Deep links / router — **shipped** (URL hash; Resources hub for rule-capable tools)  
 2. Richer diff UI for import overwrite — **shipped** (preview summary counts; unified + side-by-side View diff; identical badge)  
-3. Optional revival of legacy remote sources **only** if they still write native dirs (no `.coactl` registry)  
+3. Remote git skill sources — **shipped** (scan repo for `SKILL.md`, install into native tool dirs; no `.coactl` registry)  
 4. Optional login for remote/VPS — **shipped** (scrypt hash in `~/.coactl/auth.json`; session cookie; enable from Mode home)
 
 Legacy CLI capabilities (lockfile, drift sync from `.coactl`) remain archived unless explicitly revived under native-first constraints.

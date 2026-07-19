@@ -1401,6 +1401,42 @@ export function App() {
             onBulkDelete={handleBulkDelete}
             onBulkPreview={handleBulkPreview}
             onBulkImport={handleBulkImport}
+            onPreviewGitRepo={(input) => api.previewGitSkills(effectiveRoot, input)}
+            onPreviewGitInstall={async (skillsToInstall, overwrite) => {
+              const res = await api.previewGitInstall(effectiveRoot, {
+                tool: view.tool,
+                scope: modeToScope(view.mode),
+                skills: skillsToInstall,
+                overwrite,
+              });
+              return res.plan;
+            }}
+            onInstallGitSkills={async (skillsToInstall, overwrite) => {
+              setBusy(true);
+              try {
+                const res = await api.installGitSkills(effectiveRoot, {
+                  tool: view.tool,
+                  scope: modeToScope(view.mode),
+                  skills: skillsToInstall,
+                  overwrite,
+                });
+                const written = res.results.filter((r) => r.status === "written").length;
+                const skipped = res.results.filter((r) => r.status === "skipped").length;
+                const failed = res.results.filter((r) => r.status === "error").length;
+                pushToast(
+                  failed ? "error" : "success",
+                  `Git install: ${written} written, ${skipped} skipped${failed ? `, ${failed} failed` : ""}`,
+                );
+                setSkillsVersion((v) => v + 1);
+                if (currentMode) void refreshWorkspace(currentMode);
+                return res.results;
+              } catch (err) {
+                pushToast("error", (err as Error).message);
+                throw err;
+              } finally {
+                setBusy(false);
+              }
+            }}
             onOpen={(skill) =>
               navigate({
                 screen: "skill",

@@ -24,6 +24,7 @@ import {
   importRule,
   importSkill,
   importWorkflow,
+  installRemoteSkills,
   listCommands,
   listRules,
   listSkills,
@@ -32,6 +33,8 @@ import {
   planImportRule,
   planImportSkill,
   planImportWorkflow,
+  planInstallRemoteSkills,
+  previewSkillsFromGit,
   resolveAllCommandPaths,
   resolveAllRulePaths,
   resolveAllSkillPaths,
@@ -522,6 +525,62 @@ app.post("/api/skills/import", async (c) => {
     return c.json(importSkill(options));
   } catch (err) {
     return c.json({ error: (err as Error).message }, 404);
+  }
+});
+
+app.post("/api/skills/remote/git/preview", async (c) => {
+  const body = z
+    .object({
+      url: z.string().min(1),
+      branch: z.string().optional(),
+      subpath: z.string().optional(),
+    })
+    .safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: "url is required" }, 400);
+  try {
+    const preview = await previewSkillsFromGit({
+      url: body.data.url,
+      branch: body.data.branch,
+      subpath: body.data.subpath,
+    });
+    return c.json(preview);
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 400);
+  }
+});
+
+app.post("/api/skills/remote/git/install", async (c) => {
+  const body = z
+    .object({
+      tool: z.enum(SKILL_TOOLS),
+      scope: z.enum(["project", "global"]),
+      skills: z
+        .array(
+          z.object({
+            id: z.string().min(1),
+            contents: z.string().min(1),
+          }),
+        )
+        .min(1),
+      overwrite: z.boolean().optional(),
+      dryRun: z.boolean().optional(),
+    })
+    .safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: "tool, scope, and skills[] are required" }, 400);
+
+  const options = {
+    projectRoot: c.get("projectRoot"),
+    tool: body.data.tool as SkillTool,
+    scope: body.data.scope as ScopeMode,
+    skills: body.data.skills,
+    overwrite: body.data.overwrite,
+  };
+  const dryRun = body.data.dryRun || c.req.query("dryRun") === "1";
+  try {
+    if (dryRun) return c.json(planInstallRemoteSkills(options));
+    return c.json(installRemoteSkills(options));
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 400);
   }
 });
 

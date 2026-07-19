@@ -236,6 +236,45 @@ export interface AuthStatus {
   authFilePath: string;
 }
 
+export interface RemoteSkillCandidate {
+  id: string;
+  name: string;
+  description: string;
+  repoPath: string;
+  contents: string;
+}
+
+export interface GitSkillsPreview {
+  url: string;
+  branch?: string;
+  subpath?: string;
+  skills: RemoteSkillCandidate[];
+}
+
+export interface GitSkillsInstallPlan {
+  plan: Array<{
+    id: string;
+    tool: SkillTool;
+    scope: ScopeMode;
+    filePath: string;
+    exists: boolean;
+    action: "write" | "overwrite" | "skip" | "error";
+    reason?: string;
+    existingContents?: string;
+  }>;
+}
+
+export interface GitSkillsInstallResult {
+  results: Array<{
+    id: string;
+    tool: SkillTool;
+    scope: ScopeMode;
+    status: "written" | "skipped" | "error";
+    error?: string;
+    filePath?: string;
+  }>;
+}
+
 export class ApiError extends Error {
   status: number;
   code?: string;
@@ -376,6 +415,40 @@ export const api = {
     return request<ImportPlan>(`/api/skills/import${qs(root)}`, {
       method: "POST",
       body: JSON.stringify({ ...body, dryRun: true }),
+    });
+  },
+  previewGitSkills(root: string, body: { url: string; branch?: string; subpath?: string }) {
+    return request<GitSkillsPreview>(`/api/skills/remote/git/preview${qs(root)}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+  previewGitInstall(
+    root: string,
+    body: {
+      tool: SkillTool;
+      scope: ScopeMode;
+      skills: Array<{ id: string; contents: string }>;
+      overwrite?: boolean;
+    },
+  ) {
+    return request<GitSkillsInstallPlan>(`/api/skills/remote/git/install${qs(root)}`, {
+      method: "POST",
+      body: JSON.stringify({ ...body, dryRun: true }),
+    });
+  },
+  installGitSkills(
+    root: string,
+    body: {
+      tool: SkillTool;
+      scope: ScopeMode;
+      skills: Array<{ id: string; contents: string }>;
+      overwrite?: boolean;
+    },
+  ) {
+    return request<GitSkillsInstallResult>(`/api/skills/remote/git/install${qs(root)}`, {
+      method: "POST",
+      body: JSON.stringify(body),
     });
   },
   listRules(root: string, tool: RuleTool, scope: ScopeMode) {
